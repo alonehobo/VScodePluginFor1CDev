@@ -40,12 +40,69 @@ export const DCS_CORE_SCRIPTS = [
 
 export const DCS_CORE_STYLES = ['template.css', 'dcs.css', 'dcs-edit.css', 'host/host.css'];
 
-const DCS_ROOT =
-  /^\s*(?:\uFEFF)?(?:<\?xml[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:\w+:)?DataCompositionSchema[\s>]/;
-
 /** True when an Ext/Template.xml holds a data composition schema rather than a spreadsheet. */
 export function isDataCompositionSchema(xml: string): boolean {
-  return DCS_ROOT.test(xml);
+  // Walk the prolog once so untrusted comments cannot trigger regex backtracking.
+  let at = skipWhitespace(xml, 0);
+  if (xml.charAt(at) === '\uFEFF') {
+    at = skipWhitespace(xml, at + 1);
+  }
+
+  if (xml.startsWith('<?xml', at)) {
+    const declarationEnd = xml.indexOf('?>', at + 5);
+    if (declarationEnd < 0) {
+      return false;
+    }
+    at = skipWhitespace(xml, declarationEnd + 2);
+  }
+
+  while (xml.startsWith('<!--', at)) {
+    const commentEnd = xml.indexOf('-->', at + 4);
+    if (commentEnd < 0) {
+      return false;
+    }
+    at = skipWhitespace(xml, commentEnd + 3);
+  }
+
+  if (xml.charAt(at) !== '<') {
+    return false;
+  }
+
+  const nameStart = at + 1;
+  let prefixEnd = nameStart;
+  while (isWordCharacter(xml.charCodeAt(prefixEnd))) {
+    prefixEnd++;
+  }
+  const rootStart = prefixEnd > nameStart && xml.charAt(prefixEnd) === ':'
+    ? prefixEnd + 1
+    : nameStart;
+  const rootName = 'DataCompositionSchema';
+  if (!xml.startsWith(rootName, rootStart)) {
+    return false;
+  }
+
+  const delimiter = xml.charAt(rootStart + rootName.length);
+  return delimiter === '>' || isWhitespace(delimiter);
+}
+
+function skipWhitespace(xml: string, at: number): number {
+  while (at < xml.length && isWhitespace(xml.charAt(at))) {
+    at++;
+  }
+  return at;
+}
+
+function isWhitespace(value: string): boolean {
+  return /\s/.test(value);
+}
+
+function isWordCharacter(value: number): boolean {
+  return (
+    (value >= 0x30 && value <= 0x39) ||
+    (value >= 0x41 && value <= 0x5a) ||
+    (value >= 0x61 && value <= 0x7a) ||
+    value === 0x5f
+  );
 }
 
 export interface PreviewCorePage {

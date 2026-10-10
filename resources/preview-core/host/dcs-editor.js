@@ -3,11 +3,10 @@
  *
  * DcsPreview draws the Designer's schema window and computes every change as
  * one text edit of the elements it touches. This page applies the edit to its
- * copy of the text at once and hands it to the extension together with a hash
- * of the text it was computed against; the extension applies it as a
- * WorkspaceEdit while the document still matches, so undo, redo and saving stay
- * VS Code's own. A change from elsewhere arrives as 'update' and redraws the
- * window. */
+ * copy of the text at once and hands it to the extension together with the
+ * document version it was computed against; the extension checks that version
+ * before dispatching the edit, so undo, redo and saving stay VS Code's own. A
+ * change from elsewhere arrives as 'update' and redraws the window. */
 (function () {
   'use strict';
 
@@ -16,18 +15,9 @@
   var statusEl = document.getElementById('sb-status');
 
   var text = '';
+  var documentVersion = -1;
   var readOnly = false;
   var statusTimer = null;
-
-  /* 32-bit FNV-1a over UTF-16 code units; the extension computes the same. */
-  function hash(value) {
-    var h = 0x811c9dc5;
-    for (var i = 0; i < value.length; i++) {
-      h ^= value.charCodeAt(i);
-      h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    return h;
-  }
 
   function syncTheme() {
     var cls = document.body.classList;
@@ -52,9 +42,9 @@
   function commit(edit) {
     if (!edit) return null;
     if (edit.error) return { error: edit.error };
-    var base = hash(text);
+    var baseVersion = documentVersion;
     text = text.slice(0, edit.start) + edit.text + text.slice(edit.end);
-    vscode.postMessage({ type: 'edit', base: base, edits: [{ start: edit.start, end: edit.end, text: edit.text }] });
+    vscode.postMessage({ type: 'edit', baseVersion: baseVersion, edits: [{ start: edit.start, end: edit.end, text: edit.text }] });
     return { source: text, id: edit.id };
   }
 
@@ -155,7 +145,9 @@
       return;
     }
     if (msg.type !== 'update') return;
+    if (!Number.isSafeInteger(msg.version) || msg.version < documentVersion) return;
     readOnly = !!msg.readOnly;
+    documentVersion = msg.version;
     if (msg.text === text && host.firstChild) return;
     text = msg.text;
     draw();

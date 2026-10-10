@@ -1,4 +1,5 @@
 import * as assert from 'assert';
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vm from 'vm';
@@ -32,14 +33,39 @@ suite('dcsEditor', () => {
     assert.strictEqual(editorPageFor(''), TEMPLATE_EDITOR_PAGE);
   });
 
-  test('the schema page hashes text with the same function as the template page', () => {
-    const hashOf = (page: string): string | undefined =>
-      /function hash\(value\) \{[\s\S]*?\n {2}\}/.exec(
-        fs.readFileSync(path.join(coreRoot, 'host', page), 'utf8')
-      )?.[0];
-    const schema = hashOf('dcs-editor.js');
-    assert.ok(schema, 'hash() not found in host/dcs-editor.js');
-    assert.strictEqual(schema, hashOf('template-editor.js'));
+  test('recognizes an XML declaration, comments, and a prefixed schema root', () => {
+    assert.strictEqual(
+      isDataCompositionSchema('<?xml version="1.0"?>\n<!-- schema --><v8:DataCompositionSchema>'),
+      true
+    );
+    assert.strictEqual(isDataCompositionSchema('<!-- unfinished <DataCompositionSchema>'), false);
+  });
+
+  test('identifies a non-schema after a long comment preamble without backtracking', () => {
+    const previewCorePath = path.join(repoRoot, 'out', 'src', 'templateEditor', 'previewCoreHtml.js');
+    const vscodeStubPath = path.join(repoRoot, 'out', 'test', 'helpers', 'vscodeStubRegister.js');
+    const input = '<!--chain-->'.repeat(64) + '<NotSchema/>';
+    const script = [
+      `require(${JSON.stringify(vscodeStubPath)});`,
+      `const { isDataCompositionSchema } = require(${JSON.stringify(previewCorePath)});`,
+      `process.stdout.write(String(isDataCompositionSchema(${JSON.stringify(input)})));`,
+    ].join('\n');
+    const result = spawnSync(process.execPath, ['-e', script], {
+      encoding: 'utf8',
+      timeout: 2000,
+    });
+
+    assert.strictEqual(result.error, undefined, 'long comment preamble should be parsed promptly');
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.strictEqual(result.stdout, 'false');
+  });
+
+  test('the schema page sends a document version with edits instead of a text hash', () => {
+    const host = fs.readFileSync(path.join(coreRoot, 'host', 'dcs-editor.js'), 'utf8');
+    assert.ok(host.includes('var baseVersion = documentVersion'));
+    assert.ok(host.includes('baseVersion: baseVersion'));
+    assert.ok(host.includes('Number.isSafeInteger(msg.version)'));
+    assert.ok(!host.includes('function hash('));
   });
 
   test('every schema page asset is vendored', () => {
