@@ -9,7 +9,9 @@ import {
   TEMPLATE_CORE_SCRIPTS,
   TEMPLATE_CORE_STYLES,
 } from '../../src/templateEditor/previewCoreHtml';
-import { checkOffsetEdits, textHash } from '../../src/templateEditor/webviewTextEdits';
+import { checkOffsetEdits } from '../../src/templateEditor/webviewTextEdits';
+import { TemplateEditorProvider } from '../../src/templateEditor/templateEditorProvider';
+import { vscodeStub, vscodeTestState } from '../helpers/vscodeModuleStub';
 
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 const coreRoot = path.join(repoRoot, ...PREVIEW_CORE_DIR);
@@ -20,20 +22,83 @@ const mockWebview = {
 } as unknown as vscode.Webview;
 
 suite('templateEditor', () => {
-  test('textHash is 32-bit FNV-1a over UTF-16 code units', () => {
-    assert.strictEqual(textHash(''), 0x811c9dc5);
-    assert.strictEqual(textHash('a'), 0xe40c292c);
-    assert.notStrictEqual(textHash('Шапка'), textHash('Шапкa'));
+  test('rejects a stale document version even for a known FNV-1a collision', async () => {
+    const base = '<document><!--h3m2j4--></document>';
+    const current = '<document><!--f3kxcm--></document>';
+    assert.strictEqual(fnv1a(base), 4181877899);
+    assert.strictEqual(fnv1a(current), 4181877899);
+
+    let appliedEdit: unknown;
+    const previousApplyEdit = vscodeTestState.applyEditImpl;
+    vscodeTestState.applyEditImpl = async (edit: unknown) => {
+      appliedEdit = edit;
+      return true;
+    };
+    try {
+      const document = {
+        getText: () => current,
+        version: 2,
+        uri: { toString: () => 'file:///template.xml' },
+        positionAt: (offset: number) => new vscodeStub.Position(0, offset),
+      } as unknown as vscode.TextDocument;
+      const provider = new TemplateEditorProvider({} as vscode.Uri) as unknown as {
+        applyEdit(
+          document: vscode.TextDocument,
+          message: unknown
+        ): Promise<boolean>;
+      };
+
+      const applied = await provider.applyEdit(document, {
+        type: 'edit',
+        baseVersion: 1,
+        edits: [{ start: 0, end: 10, text: '<replacement' }],
+      });
+
+      assert.strictEqual(applied, false);
+      assert.strictEqual(appliedEdit, undefined);
+    } finally {
+      vscodeTestState.applyEditImpl = previousApplyEdit;
+    }
   });
 
-  test('the webview hashes text exactly as the extension does', () => {
-    const host = fs.readFileSync(path.join(coreRoot, 'host', 'template-editor.js'), 'utf8');
-    const source = /function hash\(value\) \{[\s\S]*?\n {2}\}/.exec(host);
-    assert.ok(source, 'hash() not found in host/template-editor.js');
-    const webviewHash = new Function(`${source[0]}; return hash;`)() as (v: string) => number;
-    for (const sample of ['', '<document/>', 'Товар\r\nКоличество', '\u{1F600} x'.repeat(50)]) {
-      assert.strictEqual(webviewHash(sample), textHash(sample));
+  test('applies offset edits when the document version still matches', async () => {
+    let appliedEdit: { replaces: Array<{ range: unknown; newText: string }> } | undefined;
+    const previousApplyEdit = vscodeTestState.applyEditImpl;
+    vscodeTestState.applyEditImpl = async (edit: { replaces: Array<{ range: unknown; newText: string }> }) => {
+      appliedEdit = edit;
+      return true;
+    };
+    try {
+      const document = {
+        getText: () => '<document/>',
+        version: 7,
+        uri: { toString: () => 'file:///template.xml' },
+        positionAt: (offset: number) => new vscodeStub.Position(0, offset),
+      } as unknown as vscode.TextDocument;
+      const provider = new TemplateEditorProvider({} as vscode.Uri) as unknown as {
+        applyEdit(document: vscode.TextDocument, message: unknown): Promise<boolean>;
+      };
+
+      const applied = await provider.applyEdit(document, {
+        type: 'edit',
+        baseVersion: 7,
+        edits: [{ start: 0, end: 10, text: '<replacement' }],
+      });
+
+      assert.strictEqual(applied, true);
+      assert.strictEqual(appliedEdit?.replaces.length, 1);
+      assert.strictEqual(appliedEdit?.replaces[0].newText, '<replacement');
+    } finally {
+      vscodeTestState.applyEditImpl = previousApplyEdit;
     }
+  });
+
+  test('the webview sends a document version with edits instead of a text hash', () => {
+    const host = fs.readFileSync(path.join(coreRoot, 'host', 'template-editor.js'), 'utf8');
+    assert.ok(host.includes('var baseVersion = documentVersion'));
+    assert.ok(host.includes('baseVersion: baseVersion'));
+    assert.ok(host.includes('Number.isSafeInteger(msg.version)'));
+    assert.ok(!host.includes('function hash('));
   });
 
   test('checkOffsetEdits accepts ascending, non-overlapping ranges inside the text', () => {
@@ -103,3 +168,12 @@ suite('templateEditor', () => {
     assert.ok(html.indexOf('<div id="x"></div>') < html.indexOf('<script'));
   });
 });
+
+function fnv1a(value: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    h ^= value.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h;
+}

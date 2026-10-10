@@ -6,20 +6,6 @@ export interface OffsetEdit {
 }
 
 /**
- * 32-bit FNV-1a over UTF-16 code units. The webview hashes the text its edit
- * was computed against; the extension applies the edit only while the
- * document still hashes the same.
- */
-export function textHash(value: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < value.length; i++) {
-    h ^= value.charCodeAt(i);
-    h = Math.imul(h, 0x01000193) >>> 0;
-  }
-  return h;
-}
-
-/**
  * Validates edits received from a webview: well-formed, ascending,
  * non-overlapping and inside a document of `length` characters.
  * Returns null when any of that does not hold.

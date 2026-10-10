@@ -3,7 +3,7 @@
  * The extension owns the TextDocument; this page draws it with TemplatePreview,
  * edits it through TemplateEdit/TemplateMarkup and hands every change back as
  * text ranges computed against the document text it was drawn from. The
- * extension applies them as one WorkspaceEdit, so undo, redo, dirty state and
+ * extension applies them as one document edit, so undo, redo, dirty state and
  * saving stay VS Code's own. A change that arrives from elsewhere (the text
  * editor, git, undo) comes back here as 'update' and redraws the sheet. */
 (function () {
@@ -20,6 +20,7 @@
   var TRAILING_COLUMNS = 2;
 
   var text = '';
+  var documentVersion = -1;
   var readOnly = false;
   var model = null;
   var session = null;
@@ -27,16 +28,6 @@
   var panel = null;
   var selection = null;
   var statusTimer = null;
-
-  /* 32-bit FNV-1a over UTF-16 code units; the extension computes the same. */
-  function hash(value) {
-    var h = 0x811c9dc5;
-    for (var i = 0; i < value.length; i++) {
-      h ^= value.charCodeAt(i);
-      h = Math.imul(h, 0x01000193) >>> 0;
-    }
-    return h;
-  }
 
   function syncTheme() {
     var cls = document.body.classList;
@@ -105,11 +96,11 @@
       options.apply = function (edits, next, _result, dirty) {
         /* Optimistic: the page shows the change at once. The ranges are
          * offsets into the text this page holds, so the extension applies
-         * them only while the document still hashes the same, and otherwise
+         * them only while the document version still matches, and otherwise
          * sends its current text back. */
-        var base = hash(text);
+        var baseVersion = documentVersion;
         text = next;
-        vscode.postMessage({ type: 'edit', base: base, edits: edits });
+        vscode.postMessage({ type: 'edit', baseVersion: baseVersion, edits: edits });
         status('');
         afterEdit(dirty);
       };
@@ -180,7 +171,9 @@
   window.addEventListener('message', function (event) {
     var msg = event.data || {};
     if (msg.type !== 'update') return;
+    if (!Number.isSafeInteger(msg.version) || msg.version < documentVersion) return;
     readOnly = !!msg.readOnly;
+    documentVersion = msg.version;
     if (msg.text === text && model) return;
     text = msg.text;
     document.getElementById('te-app').classList.toggle('te-readonly', readOnly);

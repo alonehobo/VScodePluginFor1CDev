@@ -6,7 +6,7 @@ import {
   TEMPLATE_CORE_SCRIPTS,
   TEMPLATE_CORE_STYLES,
 } from './previewCoreHtml';
-import { checkOffsetEdits, textHash } from './webviewTextEdits';
+import { checkOffsetEdits } from './webviewTextEdits';
 
 export const TEMPLATE_EDITOR_VIEW_TYPE = '1c-template-editor';
 
@@ -18,7 +18,7 @@ const TEMPLATE_EDITOR_BODY = `<div id="te-app">
 
 interface EditMessage {
   type: 'edit';
-  base: number;
+  baseVersion: number;
   edits: unknown;
 }
 
@@ -50,6 +50,7 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
       void webview.postMessage({
         type: 'update',
         text: document.getText(),
+        version: document.version,
         readOnly: readOnly(),
         error,
       });
@@ -62,7 +63,8 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
     });
     webviewPanel.onDidDispose(() => changes.dispose());
 
-    webview.onDidReceiveMessage(async (msg: unknown) => {
+    let pendingEdits: Promise<void> = Promise.resolve();
+    webview.onDidReceiveMessage((msg: unknown) => {
       if (msg && typeof msg === 'object' && (msg as { type?: unknown }).type === 'ready') {
         post();
         return;
@@ -70,15 +72,17 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
       if (!isEditMessage(msg)) {
         return;
       }
-      try {
-        const applied = await this.applyEdit(document, msg);
-        if (!applied) {
-          post('Документ изменился во время правки; показан текущий текст.');
+      pendingEdits = pendingEdits.then(async () => {
+        try {
+          const applied = await this.applyEdit(document, msg);
+          if (!applied) {
+            post('Документ изменился во время правки; показан текущий текст.');
+          }
+        } catch (err) {
+          Logger.error('Template editor: failed to apply edit', err);
+          post('Не удалось применить правку.');
         }
-      } catch (err) {
-        Logger.error('Template editor: failed to apply edit', err);
-        post('Не удалось применить правку.');
-      }
+      });
     });
 
     /* Last: the page posts 'ready' as soon as it loads, and the listener
@@ -92,10 +96,12 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
   }
 
   private async applyEdit(document: vscode.TextDocument, msg: EditMessage): Promise<boolean> {
-    const text = document.getText();
-    if (textHash(text) !== msg.base) {
+    const version = document.version;
+    if (!Number.isSafeInteger(msg.baseVersion) || msg.baseVersion !== version) {
       return false;
     }
+
+    const text = document.getText();
     const edits = checkOffsetEdits(msg.edits, text.length);
     if (!edits) {
       return false;
@@ -103,6 +109,25 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
     if (edits.length === 0) {
       return true;
     }
+
+    if (document.version !== version) {
+      return false;
+    }
+
+    const visibleEditor = vscode.window.visibleTextEditors?.find(
+      (editor) => editor.document.uri.toString() === document.uri.toString()
+    );
+    if (visibleEditor) {
+      return visibleEditor.edit((builder) => {
+        for (const e of edits) {
+          builder.replace(
+            new vscode.Range(document.positionAt(e.start), document.positionAt(e.end)),
+            e.text
+          );
+        }
+      });
+    }
+
     const edit = new vscode.WorkspaceEdit();
     for (const e of edits) {
       edit.replace(
@@ -110,6 +135,13 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
         new vscode.Range(document.positionAt(e.start), document.positionAt(e.end)),
         e.text
       );
+    }
+
+    // WorkspaceEdit has no expected-document-version field. This synchronous
+    // recheck rejects every stale version observed before dispatch; a document
+    // change queued after this check can still race the WorkspaceEdit itself.
+    if (document.version !== version) {
+      return false;
     }
     return vscode.workspace.applyEdit(edit);
   }
