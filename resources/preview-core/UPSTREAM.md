@@ -24,10 +24,17 @@ and arrive here with the next sync, so a local edit would be overwritten.
 | `template-edit.js` | selection, keyboard, toolbar and property panel over the renderer |
 | `template-diff.js` | semantic comparison of two templates (columns, rows, then cells) |
 | `template-diff-view.js` | side-by-side comparison view with the change list |
+| `dcs-preview.js` | data composition schema parser, Designer-style schema window and its edits |
+| `dcs-diff.js` | semantic comparison of two schemas (named entities and their properties) |
+| `dcs-diff-view.js` | side-by-side schema comparison with the change list |
 | `template.css` | styles of the above, extracted from the upstream `viewer.css` |
+| `dcs.css` | schema window and comparison styles, extracted from the upstream `viewer.css` |
 
 `host/` holds the webview glue written for this extension
-(`template-editor.js`, `template-diff.js`, `host.css`); it is maintained here.
+(`template-editor.js`, `template-diff.js`, `dcs-editor.js`, `dcs-diff.js`,
+`pictures.js`, `host.css`); it is maintained here. Upstream draws the schema
+window with the platform's standard pictures, which are not redistributable:
+`pictures.js` answers their paths with icons drawn for this extension.
 
 ## Обновление
 

@@ -4,6 +4,9 @@ import { execFile } from 'child_process';
 import { Logger } from '../utils/logger';
 import {
   buildPreviewCoreHtml,
+  DCS_CORE_SCRIPTS,
+  DCS_CORE_STYLES,
+  isDataCompositionSchema,
   previewCoreRoot,
   TEMPLATE_CORE_SCRIPTS,
   TEMPLATE_CORE_STYLES,
@@ -77,7 +80,7 @@ export async function readCurrent(uri: vscode.Uri): Promise<string> {
   return stripBom(Buffer.from(bytes).toString('utf8'));
 }
 
-/** Opens the visual comparison of two spreadsheet templates. */
+/** Opens the visual comparison of two spreadsheet templates or two data composition schemas. */
 export function showTemplateDiff(
   extensionUri: vscode.Uri,
   title: string,
@@ -107,11 +110,15 @@ export function showTemplateDiff(
       void vscode.commands.executeCommand('vscode.diff', left.uri, right.uri, `${title} (XML)`);
     }
   });
+  /* A side that does not exist ('') takes the kind of the other one. */
+  const dcs = isDataCompositionSchema(left.text) || isDataCompositionSchema(right.text);
   panel.webview.html = buildPreviewCoreHtml(panel.webview, extensionUri, {
     title,
     body: '<div id="diff-panel"></div>',
-    scripts: [...TEMPLATE_CORE_SCRIPTS, 'host/template-diff.js'],
-    styles: TEMPLATE_CORE_STYLES,
+    scripts: dcs
+      ? [...DCS_CORE_SCRIPTS, 'host/dcs-diff.js']
+      : [...TEMPLATE_CORE_SCRIPTS, 'host/template-diff.js'],
+    styles: dcs ? DCS_CORE_STYLES : TEMPLATE_CORE_STYLES,
   });
   return panel;
 }

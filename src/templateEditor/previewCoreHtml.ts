@@ -19,6 +19,33 @@ export const TEMPLATE_CORE_SCRIPTS = [
 
 export const TEMPLATE_CORE_STYLES = ['template.css', 'host/host.css'];
 
+/**
+ * Modules the data composition schema pages load. host/pictures.js comes
+ * first: it answers the platform picture paths the schema window asks for.
+ * The template comparison provides the splitter and the styles of the schema
+ * comparison.
+ */
+export const DCS_CORE_SCRIPTS = [
+  'host/pictures.js',
+  'xml-util.js',
+  'diff-nav.js',
+  'template-preview.js',
+  'template-diff-view.js',
+  'dcs-preview.js',
+  'dcs-diff.js',
+  'dcs-diff-view.js',
+];
+
+export const DCS_CORE_STYLES = ['template.css', 'dcs.css', 'host/host.css'];
+
+const DCS_ROOT =
+  /^\s*(?:\uFEFF)?(?:<\?xml[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:\w+:)?DataCompositionSchema[\s>]/;
+
+/** True when an Ext/Template.xml holds a data composition schema rather than a spreadsheet. */
+export function isDataCompositionSchema(xml: string): boolean {
+  return DCS_ROOT.test(xml);
+}
+
 export interface PreviewCorePage {
   title: string;
   /** Static markup of the page body; the host script fills it. */
