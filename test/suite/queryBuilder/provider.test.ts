@@ -349,6 +349,56 @@ suite('QueryBuilder Provider & Message Handler', () => {
       assert.strictEqual(replacedRange?.end.character, 5);
     });
 
+    suite('OK without an edit', () => {
+      const opened = (): QueryPackage => ({
+        queries: [
+          {
+            type: 'Select',
+            fields: [{ expression: { type: 'Identifier', name: 'Ссылка' } }],
+            from: [{ source: { type: 'Table', name: 'Справочник.Номенклатура' } }],
+          },
+        ],
+      });
+      const run = async (message: Record<string, unknown>): Promise<{ disposed: boolean; replaced?: string }> => {
+        const mock = createMockPanel();
+        let replaced: string | undefined;
+        const editor = createMockEditor('"ВЫБРАТЬ Ссылка ИЗ Справочник.Номенклатура"', (_range, text) => {
+          replaced = text;
+        });
+        const context: QueryBuilderMessageContext = {
+          panel: mock.panel,
+          editor,
+          ast: opened(),
+          initialAst: opened(),
+          metadata: [],
+          mode: 'simple',
+          replaceRange: { startOffset: 0, endOffset: 5, startLine: 1, startColumn: 1, endLine: 1, endColumn: 6 },
+        };
+        await handleQueryBuilderMessage({ command: 'save', ...message }, context);
+        return { disposed: mock.isDisposed(), replaced };
+      };
+
+      test('leaves the source text untouched and closes the builder', async () => {
+        const result = await run({ ast: opened(), edited: false });
+        assert.strictEqual(result.disposed, true);
+        assert.strictEqual(result.replaced, undefined);
+      });
+
+      test('refuses to save a query the page changed by itself', async () => {
+        const changed = opened();
+        (changed.queries[0] as { distinct?: boolean }).distinct = true;
+        const result = await run({ ast: changed, edited: false });
+        assert.strictEqual(result.disposed, false);
+        assert.strictEqual(result.replaced, undefined);
+      });
+
+      test('an edit with the same meaning still lays the text out anew', async () => {
+        const result = await run({ ast: opened(), edited: true });
+        assert.strictEqual(result.disposed, true);
+        assert.ok(result.replaced && result.replaced.includes('ВЫБРАТЬ'));
+      });
+    });
+
     test('saves withProcessing mode query: generates full execution boilerplate with parameters', async () => {
       const mock = createMockPanel();
       let replacedText: string | undefined;
