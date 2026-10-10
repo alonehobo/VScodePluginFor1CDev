@@ -42,6 +42,12 @@ export interface QueryBuilderMessageContext {
   occurrenceIndex?: number;
   initialOccurrenceCount?: number;
   enclosingScope?: string;
+  /**
+   * Where the saved query goes when it is not in a text editor (the query of
+   * a data composition schema's data set): gets the formatted query text and
+   * tells whether it was taken.
+   */
+  onSaveText?: (text: string) => boolean | Thenable<boolean>;
 }
 
 /**
@@ -133,6 +139,15 @@ export async function handleQueryBuilderMessage(
           });
         } else {
           generatedCode = generateBslSimpleQuery(targetAst);
+        }
+
+        if (context.onSaveText) {
+          if (await context.onSaveText(generatedCode)) {
+            context.panel.dispose();
+          } else {
+            void vscode.window.showErrorMessage('Не удалось вернуть запрос туда, откуда открыт конструктор.');
+          }
+          break;
         }
 
         if (context.editor) {

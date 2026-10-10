@@ -267,6 +267,39 @@ suite('QueryBuilder Provider & Message Handler', () => {
       assert.deepStrictEqual(callbackAst, updatedAst);
     });
 
+    test('a query opened from text goes back as formatted query text, not into an editor', async () => {
+      const mock = createMockPanel();
+      const ast: QueryPackage = {
+        queries: [
+          {
+            type: 'Select',
+            fields: [{ expression: { type: 'Identifier', name: 'Ссылка' } }],
+            from: [{ source: { type: 'Table', name: 'Справочник.Номенклатура' } }],
+          },
+        ],
+      };
+      const saved: string[] = [];
+      const context: QueryBuilderMessageContext = {
+        panel: mock.panel,
+        ast,
+        metadata: [],
+        mode: 'simple',
+        isSdblDocument: true,
+        replaceRange: { startOffset: 0, endOffset: 0, startLine: 1, startColumn: 1, endLine: 1, endColumn: 1 },
+        onSaveText: (text: string) => {
+          saved.push(text);
+          return true;
+        },
+      };
+
+      await handleQueryBuilderMessage({ command: 'save', ast }, context);
+
+      assert.strictEqual(saved.length, 1);
+      assert.ok(saved[0].startsWith('ВЫБРАТЬ'), saved[0]);
+      assert.ok(!saved[0].startsWith('"'), 'query text, not a BSL string literal');
+      assert.strictEqual(mock.isDisposed(), true);
+    });
+
     test('saves simple mode query: generates BSL literal, performs editor edit, and disposes panel', async () => {
       const mock = createMockPanel();
       let replacedRange: vscode.Range | undefined;
@@ -2073,7 +2106,7 @@ suite('QueryBuilder Provider & Message Handler', () => {
         },
       } as any;
 
-      const targetNested = (provider as any).getTargetRootNode(patchFileEditor);
+      const targetNested = (provider as any).getTargetRootNode(patchFileEditor.document.uri);
       assert.strictEqual(
         targetNested.targetConfigPath,
         nestedRootPath,
@@ -2087,7 +2120,7 @@ suite('QueryBuilder Provider & Message Handler', () => {
 
       // Also verify reverse order of configRoots
       mockTreeProvider.getConfigRootPaths = () => [nestedRootPath, outerRootPath];
-      const targetNestedRev = (provider as any).getTargetRootNode(patchFileEditor);
+      const targetNestedRev = (provider as any).getTargetRootNode(patchFileEditor.document.uri);
       assert.strictEqual(
         targetNestedRev.targetConfigPath,
         nestedRootPath,
@@ -2162,10 +2195,11 @@ suite('QueryBuilder Provider & Message Handler', () => {
         const fakeDeps = { state: {} as any };
         const disposables = registerQueryBuilderCommands(fakeContext, fakeDeps);
 
-        assert.strictEqual(disposables.length, 2);
-        assert.strictEqual(registeredCommands.length, 2);
+        assert.strictEqual(disposables.length, 3);
+        assert.strictEqual(registeredCommands.length, 3);
         assert.strictEqual(registeredCommands[0].id, '1c-metadata-tree.queryBuilder');
         assert.strictEqual(registeredCommands[1].id, '1c-metadata-tree.queryBuilderWithProcessing');
+        assert.strictEqual(registeredCommands[2].id, '1c-metadata-tree.queryBuilderForText');
       } finally {
         (vscode.commands as any).registerCommand = originalRegisterCommand;
       }

@@ -23,7 +23,8 @@ export const TEMPLATE_CORE_STYLES = ['template.css', 'host/host.css'];
  * Modules the data composition schema pages load. host/pictures.js comes
  * first: it answers the platform picture paths the schema window asks for.
  * The template comparison provides the splitter and the styles of the schema
- * comparison.
+ * comparison; host/query-core.js is the query parser the schema window reads a
+ * data set's query with to fill its fields.
  */
 export const DCS_CORE_SCRIPTS = [
   'host/pictures.js',
@@ -31,12 +32,13 @@ export const DCS_CORE_SCRIPTS = [
   'diff-nav.js',
   'template-preview.js',
   'template-diff-view.js',
+  'host/query-core.js',
   'dcs-preview.js',
   'dcs-diff.js',
   'dcs-diff-view.js',
 ];
 
-export const DCS_CORE_STYLES = ['template.css', 'dcs.css', 'host/host.css'];
+export const DCS_CORE_STYLES = ['template.css', 'dcs.css', 'dcs-edit.css', 'host/host.css'];
 
 const DCS_ROOT =
   /^\s*(?:\uFEFF)?(?:<\?xml[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:\w+:)?DataCompositionSchema[\s>]/;

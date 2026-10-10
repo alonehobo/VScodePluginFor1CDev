@@ -69,9 +69,16 @@
     return model ? commit(compute(model)) : null;
   }
 
+  /* Answers of the extension's query builder by request token. */
+  var builderReplies = {};
+  var builderToken = 0;
+
   /* The query text of a data set: a plain text area. The window writes the
    * text when the field is left or typing pauses, and refills the set's
-   * fields (onSettle) once the field is left. */
+   * fields (onSettle) once the field is left. openBuilder (the window's
+   * «Конструктор запроса...» button) opens the text in the extension's query
+   * builder; what is saved there replaces the text and refills the fields the
+   * same way. */
   function queryEditor(area, value, opts) {
     var box = document.createElement('textarea');
     box.className = 'dcs-host-query';
@@ -102,6 +109,18 @@
       dispose: function () {
         flush();
         if (box.parentNode) box.parentNode.removeChild(box);
+      },
+      openBuilder: opts.readOnly || !opts.onChange ? undefined : function () {
+        flush();
+        var token = ++builderToken;
+        builderReplies[token] = function (built) {
+          if (typeof built !== 'string') return;
+          // The schema changed elsewhere meanwhile and the window was redrawn.
+          if (!box.isConnected) { status('Схема изменилась, пока был открыт конструктор: запрос не перенесён.', true); return; }
+          box.value = built;
+          if (flush() && opts.onSettle) opts.onSettle();
+        };
+        vscode.postMessage({ type: 'queryBuilder', token: token, text: box.value });
       }
     };
   }
@@ -129,6 +148,12 @@
 
   window.addEventListener('message', function (event) {
     var msg = event.data || {};
+    if (msg.type === 'queryBuilt') {
+      var reply = builderReplies[msg.token];
+      delete builderReplies[msg.token];
+      if (reply) reply(msg.text);
+      return;
+    }
     if (msg.type !== 'update') return;
     readOnly = !!msg.readOnly;
     if (msg.text === text && host.firstChild) return;

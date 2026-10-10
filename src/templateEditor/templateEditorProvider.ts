@@ -11,6 +11,7 @@ import {
   TEMPLATE_CORE_STYLES,
 } from './previewCoreHtml';
 import { checkOffsetEdits } from './webviewTextEdits';
+import { QUERY_BUILDER_FOR_TEXT_COMMAND } from '../queryBuilder/queryBuilderCommandIds';
 
 export const TEMPLATE_EDITOR_VIEW_TYPE = '1c-template-editor';
 
@@ -36,6 +37,17 @@ export const DCS_EDITOR_PAGE: PreviewCorePage = {
   scripts: [...DCS_CORE_SCRIPTS, 'host/dcs-editor.js'],
   styles: DCS_CORE_STYLES,
 };
+
+interface QueryBuilderMessage {
+  type: 'queryBuilder';
+  token: number;
+  text: string;
+}
+
+function isQueryBuilderMessage(msg: unknown): msg is QueryBuilderMessage {
+  const m = msg as Partial<QueryBuilderMessage> | null;
+  return !!m && m.type === 'queryBuilder' && typeof m.token === 'number' && typeof m.text === 'string';
+}
 
 interface EditMessage {
   type: 'edit';
@@ -92,9 +104,28 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel.onDidDispose(() => changes.dispose());
 
     let pendingEdits: Promise<void> = Promise.resolve();
-    webview.onDidReceiveMessage((msg: unknown) => {
+    webview.onDidReceiveMessage(async (msg: unknown) => {
       if (msg && typeof msg === 'object' && (msg as { type?: unknown }).type === 'ready') {
         post();
+        return;
+      }
+      if (isQueryBuilderMessage(msg)) {
+        // The query of a schema's data set in the query builder; the text the
+        // user saves goes back to the page, which writes it into the schema.
+        const token = msg.token;
+        let text: string | undefined;
+        try {
+          text = readOnly()
+            ? undefined
+            : await vscode.commands.executeCommand<string | undefined>(
+                QUERY_BUILDER_FOR_TEXT_COMMAND,
+                msg.text,
+                document.uri
+              );
+        } catch (err) {
+          Logger.error('Template editor: query builder failed', err);
+        }
+        void webview.postMessage({ type: 'queryBuilt', token, text });
         return;
       }
       if (!isEditMessage(msg)) {

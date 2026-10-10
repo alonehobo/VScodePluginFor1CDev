@@ -29,12 +29,16 @@ and arrive here with the next sync, so a local edit would be overwritten.
 | `dcs-diff-view.js` | side-by-side schema comparison with the change list |
 | `template.css` | styles of the above, extracted from the upstream `viewer.css` |
 | `dcs.css` | schema window and comparison styles, extracted from the upstream `viewer.css` |
+| `dcs-edit.css` | the schema window's editing dialogs, pickers and query designer button, from the upstream `dcs-edit.css` without its expression editor part |
 
 `host/` holds the webview glue written for this extension
 (`template-editor.js`, `template-diff.js`, `dcs-editor.js`, `dcs-diff.js`,
 `pictures.js`, `host.css`); it is maintained here. Upstream draws the schema
 window with the platform's standard pictures, which are not redistributable:
 `pictures.js` answers their paths with icons drawn for this extension.
+`host/query-core.js` is generated from this extension's own query language
+parser (`scripts/bundle-dcs-query-core.js`): the schema window reads a data
+set's query with it to fill the set's fields.
 
 ## Обновление
 

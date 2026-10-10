@@ -21,6 +21,7 @@ export class QueryBuilderProvider {
   private messageHandler: QueryBuilderMessageHandler | undefined;
   private messageSubscription?: vscode.Disposable;
   private openGeneration = 0;
+  private onPanelReplaced?: () => void;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -208,7 +209,103 @@ export class QueryBuilderProvider {
       }
     }
 
-    const { targetRoot, targetConfigPath } = this.getTargetRootNode(targetEditor);
+    return this.showPanel({
+      title: 'Конструктор запроса' + (extracted.isNewQuery ? ' (новый)' : ''),
+      fileUri: targetEditor.document.uri,
+      context: {
+        editor: targetEditor,
+        ast,
+        mode,
+        replaceRange: extracted.replaceRange,
+        statementRange: extracted.statementRange,
+        variableName: extracted.variableName,
+        isSdblDocument,
+        initialDocumentVersion,
+        expectedText,
+        expectedStatementText,
+        surroundingPrefix,
+        surroundingSuffix,
+        occurrenceIndex,
+        initialOccurrenceCount,
+        enclosingScope,
+      },
+    });
+  }
+
+  /**
+   * Opens the builder on a query text that lives outside a text editor, such
+   * as the query of a data composition schema's data set. Resolves with the
+   * text the user saves, or undefined when the builder is closed without
+   * saving. `fileUri` picks the configuration whose metadata the builder shows.
+   */
+  public async openText(text: string, fileUri?: vscode.Uri): Promise<string | undefined> {
+    const isNewQuery = text.trim().length === 0;
+    let ast: QueryPackage;
+    if (isNewQuery) {
+      ast = { queries: [{ type: 'Select', fields: [], from: [] }] };
+    } else {
+      try {
+        ast = parseSdbl(text);
+      } catch (err) {
+        const errorMsg = (err as Error)?.message ?? String(err);
+        void vscode.window.showErrorMessage(
+          'Ошибка синтаксиса запроса: ' + errorMsg + '. Открытие конструктора отменено.'
+        );
+        return undefined;
+      }
+    }
+    const end = offsetToPosition(text, text.length);
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = (value: string | undefined): void => {
+        if (!settled) {
+          settled = true;
+          resolve(value);
+        }
+      };
+      const panel = this.showPanel({
+        title: 'Конструктор запроса' + (isNewQuery ? ' (новый)' : ''),
+        fileUri,
+        onReplaced: () => settle(undefined),
+        context: {
+          ast,
+          mode: 'simple',
+          replaceRange: {
+            startOffset: 0,
+            endOffset: text.length,
+            startLine: 1,
+            startColumn: 1,
+            endLine: end.line,
+            endColumn: end.column,
+          },
+          isSdblDocument: true,
+          onSaveText: (saved: string) => {
+            settle(saved);
+            return true;
+          },
+        },
+      });
+      panel.onDidDispose(() => settle(undefined));
+    });
+  }
+
+  /**
+   * Shows the builder panel (reusing an open one) for a prepared query: builds
+   * the metadata tree of the configuration of `fileUri` and wires the messages.
+   */
+  private showPanel(options: {
+    title: string;
+    fileUri?: vscode.Uri;
+    /** Called when a later opening takes the panel over from this one. */
+    onReplaced?: () => void;
+    context: Omit<
+      QueryBuilderMessageContext,
+      'panel' | 'metadata' | 'metadataProvider' | 'treeProvider' | 'targetRoot'
+    >;
+  }): vscode.WebviewPanel {
+    this.onPanelReplaced?.();
+    this.onPanelReplaced = options.onReplaced;
+    const { targetRoot, targetConfigPath } = this.getTargetRootNode(options.fileUri);
     const metadataProvider = new QueryMetadataProvider();
     const cachedTree = metadataProvider.getCachedTree(targetConfigPath);
 
@@ -227,7 +324,7 @@ export class QueryBuilderProvider {
       }
     }
 
-    const title = 'Конструктор запроса' + (extracted.isNewQuery ? ' (новый)' : '');
+    const title = options.title;
 
     if (this.panel) {
       this.panel.title = title;
@@ -258,26 +355,12 @@ export class QueryBuilderProvider {
     }
 
     const messageContext: QueryBuilderMessageContext = {
+      ...options.context,
       panel: this.panel,
-      editor: targetEditor,
-      ast,
       metadata,
-      mode,
-      replaceRange: extracted.replaceRange,
-      statementRange: extracted.statementRange,
-      variableName: extracted.variableName,
       metadataProvider,
       treeProvider: this.state?.treeDataProvider ?? null,
       targetRoot,
-      isSdblDocument,
-      initialDocumentVersion,
-      expectedText,
-      expectedStatementText,
-      surroundingPrefix,
-      surroundingSuffix,
-      occurrenceIndex,
-      initialOccurrenceCount,
-      enclosingScope,
     };
 
     this.messageHandler = new QueryBuilderMessageHandler(messageContext);
@@ -304,7 +387,7 @@ export class QueryBuilderProvider {
     return this.panel;
   }
 
-  private getTargetRootNode(targetEditor?: vscode.TextEditor): {
+  private getTargetRootNode(fileUri?: vscode.Uri): {
     targetRoot: TreeNode | null;
     targetConfigPath: string;
   } {
@@ -318,8 +401,8 @@ export class QueryBuilderProvider {
 
     let matchedConfigPath = '';
     let bestLength = -1;
-    if (targetEditor && targetEditor.document.uri.scheme === 'file') {
-      const filePath = targetEditor.document.uri.fsPath;
+    if (fileUri && fileUri.scheme === 'file') {
+      const filePath = fileUri.fsPath;
       for (const rootPath of configRoots) {
         const normRoot = path.normalize(rootPath);
         const rel = path.relative(normRoot, path.normalize(filePath));

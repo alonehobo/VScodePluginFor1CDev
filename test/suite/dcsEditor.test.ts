@@ -1,6 +1,7 @@
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vm from 'vm';
 import '../helpers/vscodeStubRegister';
 import {
   DCS_CORE_SCRIPTS,
@@ -64,6 +65,25 @@ suite('dcsEditor', () => {
     const drawn = new Set(Array.from(icons[1].matchAll(/^\s{4}(\w+):/gm), (m) => m[1]));
     const missing = [...asked].filter((name) => !drawn.has(name));
     assert.deepStrictEqual(missing, []);
+  });
+
+  test('the schema page reads a query with the bundled parser before the schema window loads', () => {
+    assert.ok(
+      DCS_CORE_SCRIPTS.indexOf('host/query-core.js') >= 0 &&
+        DCS_CORE_SCRIPTS.indexOf('host/query-core.js') < DCS_CORE_SCRIPTS.indexOf('dcs-preview.js')
+    );
+    const sandbox: { window?: unknown; BslQueryBuilderCore?: { parseSdbl(text: string): unknown } } = {};
+    sandbox.window = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(
+      fs.readFileSync(path.join(coreRoot, 'host', 'query-core.js'), 'utf8') +
+        ';window.BslQueryBuilderCore = BslQueryBuilderCore;',
+      sandbox
+    );
+    const parsed = sandbox.BslQueryBuilderCore?.parseSdbl('ВЫБРАТЬ Т.Сумма КАК Сумма ИЗ РегистрНакопления.Продажи КАК Т') as {
+      queries: Array<{ fields: Array<{ alias?: string }> }>;
+    };
+    assert.strictEqual(parsed.queries[0].fields[0].alias, 'Сумма');
   });
 
   test('no platform picture files are bundled', () => {

@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 const { bundleQueryBuilderVisitor } = require('./bundle-query-builder-visitor');
+const { bundleDcsQueryCore } = require('./bundle-dcs-query-core');
 
 bundleQueryBuilderVisitor();
+bundleDcsQueryCore();
 
 const sources = [
   'src/rolesEditor/rolesEditorWebview.html',

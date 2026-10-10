@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ExtensionState } from '../state/extensionState';
 import { QueryBuilderProvider } from './queryBuilderProvider';
+import { QUERY_BUILDER_FOR_TEXT_COMMAND } from './queryBuilderCommandIds';
 
 export function registerQueryBuilderCommands(
   context: vscode.ExtensionContext,
@@ -22,5 +23,16 @@ export function registerQueryBuilderCommands(
     }
   );
 
-  return [openSimple, openWithProcessing];
+  // Internal (not in the palette): the builder over a query text that is not
+  // in a text editor; resolves with the saved text or undefined.
+  const openForText = vscode.commands.registerCommand(
+    QUERY_BUILDER_FOR_TEXT_COMMAND,
+    (text: unknown, fileUri?: unknown) =>
+      provider.openText(
+        typeof text === 'string' ? text : '',
+        fileUri instanceof vscode.Uri ? fileUri : undefined
+      )
+  );
+
+  return [openSimple, openWithProcessing, openForText];
 }
