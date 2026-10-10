@@ -63,11 +63,10 @@ suite('templateEditor', () => {
 
   test('applies offset edits when the document version still matches', async () => {
     let appliedEdit: { replaces: Array<{ range: unknown; newText: string }> } | undefined;
-    const previousApplyEdit = vscodeTestState.applyEditImpl;
-    vscodeTestState.applyEditImpl = async (edit: { replaces: Array<{ range: unknown; newText: string }> }) => {
-      appliedEdit = edit;
-      return true;
+    const window = vscodeStub.window as unknown as {
+      visibleTextEditors?: Array<{ document: vscode.TextDocument; edit(callback: (builder: unknown) => void): Promise<boolean> }>;
     };
+    const previousVisibleTextEditors = window.visibleTextEditors;
     try {
       const document = {
         getText: () => '<document/>',
@@ -75,6 +74,15 @@ suite('templateEditor', () => {
         uri: { toString: () => 'file:///template.xml' },
         positionAt: (offset: number) => new vscodeStub.Position(0, offset),
       } as unknown as vscode.TextDocument;
+      window.visibleTextEditors = [{
+        document,
+        edit: async (callback) => {
+          const replaces: Array<{ range: unknown; newText: string }> = [];
+          callback({ replace: (range: unknown, newText: string) => replaces.push({ range, newText }) });
+          appliedEdit = { replaces };
+          return true;
+        },
+      }];
       const provider = new TemplateEditorProvider({} as vscode.Uri) as unknown as {
         applyEdit(document: vscode.TextDocument, message: unknown): Promise<boolean>;
       };
@@ -89,7 +97,79 @@ suite('templateEditor', () => {
       assert.strictEqual(appliedEdit?.replaces.length, 1);
       assert.strictEqual(appliedEdit?.replaces[0].newText, '<replacement');
     } finally {
-      vscodeTestState.applyEditImpl = previousApplyEdit;
+      window.visibleTextEditors = previousVisibleTextEditors;
+    }
+  });
+
+  test('uses a versioned text-editor transaction when an external edit races before commit', async () => {
+    let text = 'abcdef';
+    let version = 11;
+    let appliedEditCount = 0;
+    let showedTextEditor = false;
+    const window = vscodeStub.window as unknown as {
+      visibleTextEditors?: Array<{ document: vscode.TextDocument; edit(callback: (builder: unknown) => void): Promise<boolean> }>;
+      showTextDocument?: (document: vscode.TextDocument, options: { preserveFocus?: boolean; preview?: boolean }) => Promise<{
+        document: vscode.TextDocument;
+        edit(callback: (builder: unknown) => void): Promise<boolean>;
+      }>;
+    };
+    const previousVisibleTextEditors = window.visibleTextEditors;
+    const previousShowTextDocument = window.showTextDocument;
+    window.visibleTextEditors = [];
+    try {
+      const document = {
+        getText: () => text,
+        get version() { return version; },
+        uri: { toString: () => 'file:///template.xml' },
+        positionAt: (offset: number) => new vscodeStub.Position(0, offset),
+      } as unknown as vscode.TextDocument;
+      window.showTextDocument = async (shownDocument, options) => {
+        showedTextEditor = true;
+        assert.strictEqual(shownDocument, document);
+        assert.strictEqual(options.preserveFocus, true);
+        assert.strictEqual(options.preview, false);
+        return {
+          document,
+          edit: async (callback) => {
+            const submittedVersion = version;
+            const replacements: Array<{ start: number; end: number; newText: string }> = [];
+            callback({
+              replace: (range: { start: { character: number }; end: { character: number } }, newText: string) =>
+                replacements.push({ start: range.start.character, end: range.end.character, newText }),
+            });
+
+            // Simulate a main-thread edit after TextEditorEdit captured its
+            // document version but before VS Code commits the transaction.
+            text = `X${text}`;
+            version++;
+            if (version !== submittedVersion) {
+              return false;
+            }
+            for (const replacement of replacements.reverse()) {
+              text = text.slice(0, replacement.start) + replacement.newText + text.slice(replacement.end);
+            }
+            appliedEditCount++;
+            return true;
+          },
+        };
+      };
+      const provider = new TemplateEditorProvider({} as vscode.Uri) as unknown as {
+        applyEdit(document: vscode.TextDocument, message: unknown): Promise<boolean>;
+      };
+
+      const applied = await provider.applyEdit(document, {
+        type: 'edit',
+        baseVersion: 11,
+        edits: [{ start: 1, end: 2, text: 'Q' }],
+      });
+
+      assert.strictEqual(applied, false);
+      assert.strictEqual(showedTextEditor, true);
+      assert.strictEqual(appliedEditCount, 0);
+      assert.strictEqual(text, 'Xabcdef');
+    } finally {
+      window.visibleTextEditors = previousVisibleTextEditors;
+      window.showTextDocument = previousShowTextDocument;
     }
   });
 

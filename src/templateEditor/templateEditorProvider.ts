@@ -114,11 +114,39 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
       return false;
     }
 
-    const visibleEditor = vscode.window.visibleTextEditors?.find(
+    let editor = vscode.window.visibleTextEditors?.find(
       (editor) => editor.document.uri.toString() === document.uri.toString()
     );
-    if (visibleEditor) {
-      return visibleEditor.edit((builder) => {
+    const openedTextEditor = !editor;
+    const activeTabBeforeShow = vscode.window.tabGroups?.activeTabGroup?.activeTab;
+    const activeInputBeforeShow = activeTabBeforeShow?.input;
+    const customEditorWasActive = typeof vscode.TabInputCustom !== 'undefined'
+      && activeInputBeforeShow instanceof vscode.TabInputCustom
+      && activeInputBeforeShow.viewType === TEMPLATE_EDITOR_VIEW_TYPE
+      && activeInputBeforeShow.uri.toString() === document.uri.toString();
+    if (!editor && vscode.window.tabGroups && !customEditorWasActive) {
+      return false;
+    }
+    if (!editor) {
+      // WorkspaceEdit has no expected-version field. A visible TextEditor is
+      // needed because TextEditor.edit submits its captured document version
+      // with the transaction. Keep this text tab open: closing it while the
+      // shared document is dirty can discard the edit.
+      try {
+        editor = await vscode.window.showTextDocument(document, {
+          preserveFocus: true,
+          preview: false,
+        });
+      } catch {
+        return false;
+      }
+    }
+
+    try {
+      if (document.version !== version) {
+        return false;
+      }
+      return await editor.edit((builder) => {
         for (const e of edits) {
           builder.replace(
             new vscode.Range(document.positionAt(e.start), document.positionAt(e.end)),
@@ -126,23 +154,19 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
           );
         }
       });
+    } finally {
+      if (openedTextEditor && customEditorWasActive && vscode.window.activeTextEditor === editor) {
+        try {
+          await vscode.commands.executeCommand(
+            'vscode.openWith',
+            document.uri,
+            TEMPLATE_EDITOR_VIEW_TYPE,
+            { preview: false }
+          );
+        } catch (err) {
+          Logger.warn('Template editor: failed to return to custom editor after a versioned edit', err);
+        }
+      }
     }
-
-    const edit = new vscode.WorkspaceEdit();
-    for (const e of edits) {
-      edit.replace(
-        document.uri,
-        new vscode.Range(document.positionAt(e.start), document.positionAt(e.end)),
-        e.text
-      );
-    }
-
-    // WorkspaceEdit has no expected-document-version field. This synchronous
-    // recheck rejects every stale version observed before dispatch; a document
-    // change queued after this check can still race the WorkspaceEdit itself.
-    if (document.version !== version) {
-      return false;
-    }
-    return vscode.workspace.applyEdit(edit);
   }
 }
