@@ -88,8 +88,23 @@ suite('Smoke: template editor versioned edits', () => {
         await vscode.window.tabGroups.close(textTab, true);
       }
       if (saved) {
-        await fs.promises.rm(tempDir, { recursive: true, force: true });
+        await removeTempDirectory(tempDir);
       }
     }
   });
 });
+
+async function removeTempDirectory(directory: string): Promise<void> {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await fs.promises.rm(directory, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (!['EBUSY', 'EPERM', 'ENOTEMPTY'].includes(code ?? '') || attempt === 4) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    }
+  }
+}
