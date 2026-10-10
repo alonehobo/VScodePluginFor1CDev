@@ -461,6 +461,40 @@ suite('Query Builder Webview UI & Logic Refinements (Task 2)', () => {
     inputOn.dispatchEvent({ type: 'change' });
   }
 
+  suite('Package query ordering preserves leading comments', () => {
+    test('moving one of two commented queries down keeps each leading comment with its query', () => {
+      const text =
+        '// комментарий запроса А\n' +
+        'ВЫБРАТЬ 1 КАК ЗначениеА ИЗ Справочник.А КАК А;\n' +
+        '// комментарий запроса Б\n' +
+        'ВЫБРАТЬ 2 КАК ЗначениеБ ИЗ Справочник.Б КАК Б';
+      const env = createWebviewEnvironment();
+      env.postMessageToWebview({
+        command: 'init',
+        ast: parseSdbl(text),
+        metadata: [],
+        mode: 'simple',
+      });
+
+      assert.strictEqual(env.state.ast.queries.length, 2);
+      env.elements.btnMoveQueryDown.click();
+      assert.strictEqual(env.state.ast.queries[0].fields[0].alias, 'ЗначениеБ');
+
+      env.elements.btnSave.click();
+      const saveMsg = env.sentMessages.find((message: any) => message.command === 'save');
+      assert.ok(saveMsg, 'save command must be sent');
+      const formatted = formatSdbl(saveMsg.ast);
+      const queryB = formatted.indexOf('2 КАК ЗначениеБ');
+      const commentB = formatted.indexOf('// комментарий запроса Б');
+      const queryA = formatted.indexOf('1 КАК ЗначениеА');
+      const commentA = formatted.indexOf('// комментарий запроса А');
+
+      assert.ok(queryB >= 0 && queryA > queryB, formatted);
+      assert.ok(commentB >= 0 && commentB < queryB, formatted);
+      assert.ok(commentA > queryB && commentA < queryA, formatted);
+    });
+  });
+
   suite('Point 1 & 9: Tables, Fields & SDBL Syntax', () => {
     test('getTableAliasWithoutPrefix strips metadata prefixes in Russian and English', () => {
       const env = createWebviewEnvironment();
@@ -2214,4 +2248,3 @@ suite('Query Builder Webview UI & Logic Refinements (Task 2)', () => {
     });
   });
 });
-

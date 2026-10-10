@@ -27,6 +27,27 @@ suite('SDBL round trip: comments, errors, unions', () => {
     assert.strictEqual(formatSdbl(parseSdbl(formatted)), formatted);
   });
 
+  test('leading comments stay with each query after the package AST is reordered', () => {
+    const text =
+      '// комментарий запроса А\n' +
+      'ВЫБРАТЬ 1 КАК ЗначениеА ИЗ Справочник.А КАК А;\n' +
+      '// комментарий запроса Б\n' +
+      'ВЫБРАТЬ 2 КАК ЗначениеБ ИЗ Справочник.Б КАК Б';
+    const ast = parseSdbl(text);
+    assert.strictEqual(ast.queries.length, 2);
+    [ast.queries[0], ast.queries[1]] = [ast.queries[1], ast.queries[0]];
+
+    const formatted = formatSdbl(ast);
+    const queryB = formatted.indexOf('2 КАК ЗначениеБ');
+    const commentB = formatted.indexOf('// комментарий запроса Б');
+    const queryA = formatted.indexOf('1 КАК ЗначениеА');
+    const commentA = formatted.indexOf('// комментарий запроса А');
+
+    assert.ok(queryB >= 0 && queryA > queryB, formatted);
+    assert.ok(commentB >= 0 && commentB < queryB, formatted);
+    assert.ok(commentA > queryB && commentA < queryA, formatted);
+  });
+
   test('semantic equality ignores layout and literal spelling but not meaning', () => {
     const a = parseSdbl('ВЫБРАТЬ Т.А ИЗ Т КАК Т ГДЕ Т.Б = НЕОПРЕДЕЛЕНО И НЕ Т.В В (1, 2)');
     const b = parseSdbl('ВЫБРАТЬ\n\tТ.А\nИЗ\n\tТ КАК Т\nГДЕ\n\tТ.Б = НЕОПРЕДЕЛЕНО\n\tИ НЕ Т.В В (1, 2)');

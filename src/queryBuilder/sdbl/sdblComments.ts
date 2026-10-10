@@ -64,11 +64,12 @@ function sameKeys(keys: string[], start: number, expected: string[]): boolean {
 }
 
 function windowMatches(keys: string[], comment: any): number[] {
-  if (!comment.before.length) {return [0];}
-  if (!comment.after.length) {return [keys.length];}
+  const before: string[] = comment.before || [];
+  const after: string[] = comment.after || [];
+  if (!before.length && !after.length) {return [0];}
   const result: number[] = [];
-  for (let i = comment.before.length; i <= keys.length; i++)
-    {if (sameKeys(keys, i - comment.before.length, comment.before) && sameKeys(keys, i, comment.after)) {result.push(i);}}
+  for (let i = before.length; i <= keys.length; i++)
+    {if (sameKeys(keys, i - before.length, before) && sameKeys(keys, i, after)) {result.push(i);}}
   return result;
 }
 
@@ -83,14 +84,25 @@ function contextAgreement(keys: string[], i: number, context: { before: string[]
 function commentPosition(keys: string[], comment: any, unchanged: boolean): number {
   const candidates = windowMatches(keys, comment);
   if (candidates.length === 1) {return candidates[0];}
-  if (!candidates.length) {return -1;}
   // A reordered or edited package may move repeated fragments: then only the
   // wider neighbourhood decides.
   if (unchanged && comment.count === candidates.length && comment.ordinal >= 0) {return candidates[comment.ordinal];}
   if (!comment.context) {return -1;}
-  const scores = candidates.map(i => contextAgreement(keys, i, comment.context));
-  const best = Math.max(...scores);
-  return scores.filter(score => score === best).length === 1 ? candidates[scores.indexOf(best)] : -1;
+  const positions = candidates.length
+    ? candidates
+    : Array.from({ length: keys.length + 1 }, (_value, index) => index);
+  let bestScore = 0, bestPosition = -1, ambiguous = false;
+  for (const position of positions) {
+    const score = contextAgreement(keys, position, comment.context);
+    if (score > bestScore) {
+      bestScore = score;
+      bestPosition = position;
+      ambiguous = false;
+    } else if (score > 0 && score === bestScore) {
+      ambiguous = true;
+    }
+  }
+  return bestPosition >= 0 && !ambiguous ? bestPosition : -1;
 }
 
 // The formatted text gets the comments back by their neighbouring tokens: the
