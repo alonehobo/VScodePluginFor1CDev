@@ -73,6 +73,7 @@
     }
     if (panel) {
       panel.setSession(session);
+      panel.refresh();
       return;
     }
     panel = window.TemplateEdit.properties(document, session, {

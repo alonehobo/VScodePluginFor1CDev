@@ -2399,7 +2399,7 @@ function toolbar(doc, session, options) {
             el.setAttribute('width', String(w));
             el.setAttribute('height', '1.6');
             el.setAttribute('rx', '0.6');
-            el.setAttribute('fill', '#1a1a1a');
+            el.setAttribute('fill', 'currentColor');
             svg.appendChild(el);
         }
 
@@ -2493,7 +2493,7 @@ function toolbar(doc, session, options) {
             el.setAttribute('y1', String(y1));
             el.setAttribute('x2', String(x2));
             el.setAttribute('y2', String(y2));
-            el.setAttribute('stroke', on ? '#1a1a1a' : '#c0c0c0');
+            el.setAttribute('stroke', on ? 'currentColor' : '#c0c0c0');
             el.setAttribute('stroke-width', on && spec.thick ? '2.4' : '1');
             if (!on) el.setAttribute('stroke-dasharray', '1 1.5');
             svg.appendChild(el);

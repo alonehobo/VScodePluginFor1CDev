@@ -94,12 +94,7 @@ export function showTemplateDiff(
       localResourceRoots: [previewCoreRoot(extensionUri)],
     }
   );
-  panel.webview.html = buildPreviewCoreHtml(panel.webview, extensionUri, {
-    title,
-    body: '<div id="diff-panel"></div>',
-    scripts: [...TEMPLATE_CORE_SCRIPTS, 'host/template-diff.js'],
-    styles: TEMPLATE_CORE_STYLES,
-  });
+  /* The listener goes first: the page posts 'ready' as soon as it loads. */
   panel.webview.onDidReceiveMessage((msg: unknown) => {
     const type = msg && typeof msg === 'object' ? (msg as { type?: unknown }).type : undefined;
     if (type === 'ready') {
@@ -111,6 +106,12 @@ export function showTemplateDiff(
     } else if (type === 'showXml') {
       void vscode.commands.executeCommand('vscode.diff', left.uri, right.uri, `${title} (XML)`);
     }
+  });
+  panel.webview.html = buildPreviewCoreHtml(panel.webview, extensionUri, {
+    title,
+    body: '<div id="diff-panel"></div>',
+    scripts: [...TEMPLATE_CORE_SCRIPTS, 'host/template-diff.js'],
+    styles: TEMPLATE_CORE_STYLES,
   });
   return panel;
 }

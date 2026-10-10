@@ -47,6 +47,11 @@
       onRestore: never,
       onShowXml: function () { vscode.postMessage({ type: 'showXml' }); }
     });
+    /* Upstream opens the panes at two thirds of the page; an editor tab is
+     * shorter than its window, so the list starts at half. The splitter
+     * still moves it. */
+    var panes = host.querySelector('.tpd-panes');
+    if (panes) panes.style.flex = '0 1 50%';
   }
 
   window.addEventListener('message', function (event) {

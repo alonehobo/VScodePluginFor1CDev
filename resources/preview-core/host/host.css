@@ -60,3 +60,20 @@ body {
   padding: 16px;
   color: var(--vscode-errorForeground);
 }
+/* The sheet keeps the platform's light paper in either theme, as the
+ * Designer draws it. */
+#form-preview {
+  background: #f2f2f2;
+  color: #252525;
+}
+/* Cards are as wide as the list and their titles ellipsize: a few pixels of
+ * rounding must not add a sideways scrollbar. */
+#diff-panel .tpd-list {
+  overflow-x: hidden;
+}
+/* Group headers of the cell property panel have no dark variant upstream. */
+#outline-panel.dark .tp-props-group {
+  color: #bbb;
+  background: #2d2d30;
+  border-color: #3c3c3c;
+}

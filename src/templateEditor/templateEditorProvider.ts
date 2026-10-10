@@ -44,13 +44,6 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
       enableScripts: true,
       localResourceRoots: [previewCoreRoot(this.extensionUri)],
     };
-    webview.html = buildPreviewCoreHtml(webview, this.extensionUri, {
-      title: 'Макет 1С',
-      body: TEMPLATE_EDITOR_BODY,
-      scripts: [...TEMPLATE_CORE_SCRIPTS, 'host/template-editor.js'],
-      styles: TEMPLATE_CORE_STYLES,
-    });
-
     const readOnly = (): boolean =>
       vscode.workspace.fs.isWritableFileSystem(document.uri.scheme) === false;
     const post = (error?: string): void => {
@@ -86,6 +79,15 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
         Logger.error('Template editor: failed to apply edit', err);
         post('Не удалось применить правку.');
       }
+    });
+
+    /* Last: the page posts 'ready' as soon as it loads, and the listener
+     * above has to be in place by then. */
+    webview.html = buildPreviewCoreHtml(webview, this.extensionUri, {
+      title: 'Макет 1С',
+      body: TEMPLATE_EDITOR_BODY,
+      scripts: [...TEMPLATE_CORE_SCRIPTS, 'host/template-editor.js'],
+      styles: TEMPLATE_CORE_STYLES,
     });
   }
 
