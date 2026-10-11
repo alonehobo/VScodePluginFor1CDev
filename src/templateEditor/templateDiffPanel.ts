@@ -1,0 +1,207 @@
+import * as vscode from 'vscode';
+import * as path from 'path';
+import { execFile } from 'child_process';
+import { Logger } from '../utils/logger';
+import {
+  buildPreviewCoreHtml,
+  previewCoreRoot,
+  TEMPLATE_CORE_SCRIPTS,
+  TEMPLATE_CORE_STYLES,
+} from './previewCoreHtml';
+
+/** Scheme of the read-only documents that hold a compared revision for the XML diff. */
+export const TEMPLATE_REVISION_SCHEME = '1c-template-revision';
+
+export interface DiffSide {
+  /** Document text; '' for a side that does not exist (a file added since HEAD). */
+  text: string;
+  label: string;
+  /** What the plain XML diff opens for this side. */
+  uri: vscode.Uri;
+}
+
+/** Holds compared revisions so that vscode.diff can open them as documents. */
+export class TemplateRevisionContentProvider implements vscode.TextDocumentContentProvider {
+  private readonly texts = new Map<string, string>();
+  private next = 0;
+
+  remember(text: string, fileName: string): vscode.Uri {
+    const uri = vscode.Uri.from({
+      scheme: TEMPLATE_REVISION_SCHEME,
+      path: `/${this.next++}/${fileName}`,
+    });
+    this.texts.set(uri.toString(), text);
+    return uri;
+  }
+
+  provideTextDocumentContent(uri: vscode.Uri): string {
+    return this.texts.get(uri.toString()) ?? '';
+  }
+}
+
+/** Text of `file` at git HEAD; '' when the file is not in HEAD. Rejects outside a repository. */
+export function readGitHead(file: string): Promise<string> {
+  const cwd = path.dirname(file);
+  const spec = `HEAD:./${path.basename(file)}`;
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      ['-c', 'core.quotepath=off', 'show', spec],
+      { cwd, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024, windowsHide: true },
+      (err, stdout, stderr) => {
+        if (!err) {
+          resolve(stripBom(stdout));
+          return;
+        }
+        if (/exists on disk, but not in|does not exist in/.test(stderr)) {
+          resolve('');
+          return;
+        }
+        reject(new Error(stderr.trim() || err.message));
+      }
+    );
+  });
+}
+
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+}
+
+/** Current text of a file: the open document when there is one (unsaved changes included). */
+export async function readCurrent(uri: vscode.Uri): Promise<string> {
+  const open = vscode.workspace.textDocuments.find((d) => d.uri.toString() === uri.toString());
+  if (open) {
+    return open.getText();
+  }
+  const bytes = await vscode.workspace.fs.readFile(uri);
+  return stripBom(Buffer.from(bytes).toString('utf8'));
+}
+
+/** Opens the visual comparison of two spreadsheet templates. */
+export function showTemplateDiff(
+  extensionUri: vscode.Uri,
+  title: string,
+  left: DiffSide,
+  right: DiffSide
+): vscode.WebviewPanel {
+  const panel = vscode.window.createWebviewPanel(
+    '1c-template-diff',
+    title,
+    vscode.ViewColumn.Active,
+    {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+      localResourceRoots: [previewCoreRoot(extensionUri)],
+    }
+  );
+  /* The listener goes first: the page posts 'ready' as soon as it loads. */
+  panel.webview.onDidReceiveMessage((msg: unknown) => {
+    const type = msg && typeof msg === 'object' ? (msg as { type?: unknown }).type : undefined;
+    if (type === 'ready') {
+      void panel.webview.postMessage({
+        type: 'show',
+        left: { text: left.text, label: left.label },
+        right: { text: right.text, label: right.label },
+      });
+    } else if (type === 'showXml') {
+      void vscode.commands.executeCommand('vscode.diff', left.uri, right.uri, `${title} (XML)`);
+    }
+  });
+  panel.webview.html = buildPreviewCoreHtml(panel.webview, extensionUri, {
+    title,
+    body: '<div id="diff-panel"></div>',
+    scripts: [...TEMPLATE_CORE_SCRIPTS, 'host/template-diff.js'],
+    styles: TEMPLATE_CORE_STYLES,
+  });
+  return panel;
+}
+
+function targetUri(arg: unknown): vscode.Uri | undefined {
+  if (arg instanceof vscode.Uri) {
+    return arg;
+  }
+  const tab = vscode.window.tabGroups.activeTabGroup.activeTab?.input;
+  if (tab instanceof vscode.TabInputCustom || tab instanceof vscode.TabInputText) {
+    return tab.uri;
+  }
+  return undefined;
+}
+
+/** Registers «compare with HEAD» and «compare two templates». */
+export function registerTemplateDiffCommands(context: vscode.ExtensionContext): void {
+  const revisions = new TemplateRevisionContentProvider();
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(TEMPLATE_REVISION_SCHEME, revisions)
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('1c-template-editor.compareWithHead', async (arg?: unknown) => {
+      const uri = targetUri(arg);
+      if (!uri || uri.scheme !== 'file') {
+        void vscode.window.showWarningMessage('Выберите файл макета Template.xml.');
+        return;
+      }
+      try {
+        const [base, current] = await Promise.all([readGitHead(uri.fsPath), readCurrent(uri)]);
+        const name = path.basename(uri.fsPath);
+        showTemplateDiff(
+          context.extensionUri,
+          `${relativeName(uri)} ↔ HEAD`,
+          { text: base, label: 'HEAD', uri: revisions.remember(base, name) },
+          { text: current, label: 'текущее состояние', uri }
+        );
+      } catch (err) {
+        Logger.error('Template diff: git HEAD is not available', err);
+        void vscode.window.showErrorMessage(
+          `Не удалось получить версию из git: ${err instanceof Error ? err.message : String(err)}`
+        );
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand(
+      '1c-template-editor.compareFiles',
+      async (arg?: unknown, selected?: unknown) => {
+        const picked = Array.isArray(selected)
+          ? selected.filter((u): u is vscode.Uri => u instanceof vscode.Uri)
+          : [];
+        let pair: vscode.Uri[] = picked.length === 2 ? picked : [];
+        if (pair.length !== 2) {
+          const first = targetUri(arg);
+          if (!first) {
+            void vscode.window.showWarningMessage('Выберите файл макета Template.xml.');
+            return;
+          }
+          const other = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            openLabel: 'Сравнить',
+            filters: { 'Макет 1С': ['xml'] },
+          });
+          if (!other || other.length === 0) {
+            return;
+          }
+          pair = [other[0], first];
+        }
+        try {
+          const [leftText, rightText] = await Promise.all(pair.map((u) => readCurrent(u)));
+          showTemplateDiff(
+            context.extensionUri,
+            `${relativeName(pair[0])} ↔ ${relativeName(pair[1])}`,
+            { text: leftText, label: relativeName(pair[0]), uri: pair[0] },
+            { text: rightText, label: relativeName(pair[1]), uri: pair[1] }
+          );
+        } catch (err) {
+          Logger.error('Template diff: failed to read files', err);
+          void vscode.window.showErrorMessage('Не удалось прочитать макеты для сравнения.');
+        }
+      }
+    )
+  );
+}
+
+/** «Documents/Invoice/Templates/Print» rather than the bare «Template.xml». */
+function relativeName(uri: vscode.Uri): string {
+  const rel = vscode.workspace.asRelativePath(uri, false);
+  return rel.replace(/[\\/]Ext[\\/]Template\.xml$/i, '');
+}

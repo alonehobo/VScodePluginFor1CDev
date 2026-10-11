@@ -1155,6 +1155,17 @@
         "command": "1c-metadata-tree.support.showLastRun",
         "title": "Показать результат синхронизации",
         "category": "CDT 41"
+      },
+      {
+        "command": "1c-template-editor.compareWithHead",
+        "title": "CDT 41: Сравнить макет с HEAD",
+        "category": "CDT 41",
+        "icon": "$(git-compare)"
+      },
+      {
+        "command": "1c-template-editor.compareFiles",
+        "title": "CDT 41: Сравнить макеты",
+        "category": "CDT 41"
       }
     ],
     "customEditors": [
@@ -1183,6 +1194,16 @@
           },
           {
             "filenamePattern": "**/Ext/CommonTemplate.xml"
+          }
+        ]
+      },
+      {
+        "viewType": "1c-template-editor",
+        "displayName": "Редактор макета 1С",
+        "priority": "option",
+        "selector": [
+          {
+            "filenamePattern": "**/Ext/Template.xml"
           }
         ]
       }
@@ -1342,6 +1363,16 @@
           "command": "1c-metadata-tree.buildExternalProcessor",
           "when": "resourceExtname == .xml",
           "group": "1c_tools@2"
+        },
+        {
+          "command": "1c-template-editor.compareWithHead",
+          "when": "resourceFilename == Template.xml",
+          "group": "3_compare@1"
+        },
+        {
+          "command": "1c-template-editor.compareFiles",
+          "when": "resourceFilename == Template.xml",
+          "group": "3_compare@2"
         }
       ],
       "editor/title": [
@@ -1349,6 +1380,11 @@
           "command": "1c-metadata-tree.validateCurrentXml",
           "when": "resourceExtname == .xml",
           "group": "navigation@20"
+        },
+        {
+          "command": "1c-template-editor.compareWithHead",
+          "when": "activeCustomEditorId == 1c-template-editor",
+          "group": "navigation"
         }
       ],
       "editor/context": [

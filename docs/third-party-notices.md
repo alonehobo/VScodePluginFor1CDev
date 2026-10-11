@@ -58,6 +58,10 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## BslEdit spreadsheet template editor
+
+`resources/preview-core/` bundles unmodified modules of BslEdit, `packages/1c-preview-core/browser/` ([repository](https://github.com/alonehobo/BslEdit)): the spreadsheet template parser and renderer, the markup editing engine, the template comparison and their styles. They run only inside the template editor and comparison webviews; `resources/preview-core/UPSTREAM.md` lists the files and `resources/preview-core/LICENSE` carries the MIT notice reproduced in the section above. No platform pictures or other platform artwork are bundled.
+
 ## Managed 1C form validation rules
 
 `src/agent/agentStaticForms.ts` adapts validation rules from the `form-validate` skill in [`cc-1c-skills`](https://github.com/Nikolay-Shirokov/cc-1c-skills), including duplicate identifiers and names, companion elements, data paths, command references, event handlers, and `MainAttribute` checks. The implementation uses this repository's TypeScript and XML parser; the upstream Python and PowerShell scripts are not bundled.

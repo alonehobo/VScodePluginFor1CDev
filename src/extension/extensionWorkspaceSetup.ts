@@ -13,6 +13,11 @@ import { FunctionalOptionStrategy } from '../compositionEditor/strategies/functi
 import { FilterCriterionStrategy } from '../compositionEditor/strategies/filterCriterionStrategy';
 import { FormEditorProvider } from '../formEditor/formEditorProvider';
 import { MxlPreviewProvider } from '../mxlPreview/mxlPreviewProvider';
+import {
+  TEMPLATE_EDITOR_VIEW_TYPE,
+  TemplateEditorProvider,
+} from '../templateEditor/templateEditorProvider';
+import { registerTemplateDiffCommands } from '../templateEditor/templateDiffPanel';
 import { ReloadCoordinatorService } from '../services/reloadCoordinatorService';
 import { MetadataType } from '../models/treeNode';
 import { Logger } from '../utils/logger';
@@ -143,7 +148,7 @@ function registerMetadataTreeProviders(
   context.subscriptions.push(treeSelectionDisposable);
 }
 
-/** Registers form editor, MXL preview custom editor providers. */
+/** Registers form editor, MXL preview and template editor providers. */
 function registerEditorProviders(
   context: vscode.ExtensionContext,
   state: ExtensionState
@@ -166,6 +171,15 @@ function registerEditorProviders(
       supportsMultipleEditorsPerDocument: true,
     })
   );
+
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      TEMPLATE_EDITOR_VIEW_TYPE,
+      new TemplateEditorProvider(context.extensionUri),
+      { webviewOptions: { retainContextWhenHidden: true } }
+    )
+  );
+  registerTemplateDiffCommands(context);
 }
 
 /** Registers infobase tree view, ibcmd hooks, binding commands. */
