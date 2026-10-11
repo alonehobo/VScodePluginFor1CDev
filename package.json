@@ -1199,7 +1199,7 @@
       },
       {
         "viewType": "1c-template-editor",
-        "displayName": "Редактор макета 1С",
+        "displayName": "Редактор макета 1С (табличный документ, СКД)",
         "priority": "option",
         "selector": [
           {

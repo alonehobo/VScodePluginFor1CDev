@@ -2,19 +2,52 @@ import * as vscode from 'vscode';
 import { Logger } from '../utils/logger';
 import {
   buildPreviewCoreHtml,
+  DCS_CORE_SCRIPTS,
+  DCS_CORE_STYLES,
+  isDataCompositionSchema,
+  PreviewCorePage,
   previewCoreRoot,
   TEMPLATE_CORE_SCRIPTS,
   TEMPLATE_CORE_STYLES,
 } from './previewCoreHtml';
 import { checkOffsetEdits } from './webviewTextEdits';
+import { QUERY_BUILDER_FOR_TEXT_COMMAND } from '../queryBuilder/queryBuilderCommandIds';
 
 export const TEMPLATE_EDITOR_VIEW_TYPE = '1c-template-editor';
 
-const TEMPLATE_EDITOR_BODY = `<div id="te-app">
+/** Spreadsheet template: the sheet, the cell property panel, a status line. */
+export const TEMPLATE_EDITOR_PAGE: PreviewCorePage = {
+  title: 'Макет 1С',
+  body: `<div id="te-app">
   <div id="form-preview"></div>
   <div id="outline-panel"><div id="property-inspector"></div></div>
   <div id="sb-status"></div>
-</div>`;
+</div>`,
+  scripts: [...TEMPLATE_CORE_SCRIPTS, 'host/template-editor.js'],
+  styles: TEMPLATE_CORE_STYLES,
+};
+
+/** Data composition schema: the Designer's schema window and a status line. */
+export const DCS_EDITOR_PAGE: PreviewCorePage = {
+  title: 'Схема компоновки данных',
+  body: `<div id="te-app" class="te-readonly">
+  <div id="form-preview"></div>
+  <div id="sb-status"></div>
+</div>`,
+  scripts: [...DCS_CORE_SCRIPTS, 'host/dcs-editor.js'],
+  styles: DCS_CORE_STYLES,
+};
+
+interface QueryBuilderMessage {
+  type: 'queryBuilder';
+  token: number;
+  text: string;
+}
+
+function isQueryBuilderMessage(msg: unknown): msg is QueryBuilderMessage {
+  const m = msg as Partial<QueryBuilderMessage> | null;
+  return !!m && m.type === 'queryBuilder' && typeof m.token === 'number' && typeof m.text === 'string';
+}
 
 interface EditMessage {
   type: 'edit';
@@ -26,11 +59,18 @@ function isEditMessage(msg: unknown): msg is EditMessage {
   return !!msg && typeof msg === 'object' && (msg as { type?: unknown }).type === 'edit';
 }
 
+/** The page for a document: both kinds of template live in Ext/Template.xml. */
+export function editorPageFor(text: string): PreviewCorePage {
+  return isDataCompositionSchema(text) ? DCS_EDITOR_PAGE : TEMPLATE_EDITOR_PAGE;
+}
+
 /**
- * Visual editor of a spreadsheet template (Ext/Template.xml): the sheet as the
- * Designer draws it, cell editing, formatting, named areas and parameters.
- * The document stays a TextDocument, so undo, redo, dirty state, saving and
- * the plain XML editor beside it all keep working as usual.
+ * Visual editor of an Ext/Template.xml built from preview-core modules: a
+ * spreadsheet template (cell editing, formatting, named areas, parameters) or
+ * a data composition schema (the Designer's schema window), chosen by the
+ * document's root element when the editor opens. The document stays a
+ * TextDocument, so undo, redo, dirty state, saving and the plain XML editor
+ * beside it all keep working as usual.
  */
 export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
   constructor(private readonly extensionUri: vscode.Uri) {}
@@ -64,9 +104,28 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
     webviewPanel.onDidDispose(() => changes.dispose());
 
     let pendingEdits: Promise<void> = Promise.resolve();
-    webview.onDidReceiveMessage((msg: unknown) => {
+    webview.onDidReceiveMessage(async (msg: unknown) => {
       if (msg && typeof msg === 'object' && (msg as { type?: unknown }).type === 'ready') {
         post();
+        return;
+      }
+      if (isQueryBuilderMessage(msg)) {
+        // The query of a schema's data set in the query builder; the text the
+        // user saves goes back to the page, which writes it into the schema.
+        const token = msg.token;
+        let text: string | undefined;
+        try {
+          text = readOnly()
+            ? undefined
+            : await vscode.commands.executeCommand<string | undefined>(
+                QUERY_BUILDER_FOR_TEXT_COMMAND,
+                msg.text,
+                document.uri
+              );
+        } catch (err) {
+          Logger.error('Template editor: query builder failed', err);
+        }
+        void webview.postMessage({ type: 'queryBuilt', token, text });
         return;
       }
       if (!isEditMessage(msg)) {
@@ -87,12 +146,11 @@ export class TemplateEditorProvider implements vscode.CustomTextEditorProvider {
 
     /* Last: the page posts 'ready' as soon as it loads, and the listener
      * above has to be in place by then. */
-    webview.html = buildPreviewCoreHtml(webview, this.extensionUri, {
-      title: 'Макет 1С',
-      body: TEMPLATE_EDITOR_BODY,
-      scripts: [...TEMPLATE_CORE_SCRIPTS, 'host/template-editor.js'],
-      styles: TEMPLATE_CORE_STYLES,
-    });
+    webview.html = buildPreviewCoreHtml(
+      webview,
+      this.extensionUri,
+      editorPageFor(document.getText())
+    );
   }
 
   private async applyEdit(document: vscode.TextDocument, msg: EditMessage): Promise<boolean> {

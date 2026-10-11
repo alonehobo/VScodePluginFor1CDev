@@ -1,0 +1,118 @@
+import * as assert from 'assert';
+import { spawnSync } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as vm from 'vm';
+import '../helpers/vscodeStubRegister';
+import {
+  DCS_CORE_SCRIPTS,
+  DCS_CORE_STYLES,
+  isDataCompositionSchema,
+  PREVIEW_CORE_DIR,
+} from '../../src/templateEditor/previewCoreHtml';
+import {
+  DCS_EDITOR_PAGE,
+  editorPageFor,
+  TEMPLATE_EDITOR_PAGE,
+} from '../../src/templateEditor/templateEditorProvider';
+
+const repoRoot = path.resolve(__dirname, '..', '..', '..');
+const coreRoot = path.join(repoRoot, ...PREVIEW_CORE_DIR);
+const fixtures = path.join(repoRoot, 'test', 'fixtures', 'preview-core');
+
+suite('dcsEditor', () => {
+  test('a schema and a spreadsheet are told apart by the root element', () => {
+    const schema = fs.readFileSync(path.join(fixtures, 'Schema.xml'), 'utf8');
+    const sheet = fs.readFileSync(path.join(fixtures, 'Template.xml'), 'utf8');
+    assert.strictEqual(isDataCompositionSchema(schema), true);
+    assert.strictEqual(isDataCompositionSchema('\uFEFF' + schema), true);
+    assert.strictEqual(isDataCompositionSchema(sheet), false);
+    assert.strictEqual(isDataCompositionSchema('<Root><DataCompositionSchema/></Root>'), false);
+    assert.strictEqual(editorPageFor(schema), DCS_EDITOR_PAGE);
+    assert.strictEqual(editorPageFor(sheet), TEMPLATE_EDITOR_PAGE);
+    assert.strictEqual(editorPageFor(''), TEMPLATE_EDITOR_PAGE);
+  });
+
+  test('recognizes an XML declaration, comments, and a prefixed schema root', () => {
+    assert.strictEqual(
+      isDataCompositionSchema('<?xml version="1.0"?>\n<!-- schema --><v8:DataCompositionSchema>'),
+      true
+    );
+    assert.strictEqual(isDataCompositionSchema('<!-- unfinished <DataCompositionSchema>'), false);
+  });
+
+  test('identifies a non-schema after a long comment preamble without backtracking', () => {
+    const previewCorePath = path.join(repoRoot, 'out', 'src', 'templateEditor', 'previewCoreHtml.js');
+    const vscodeStubPath = path.join(repoRoot, 'out', 'test', 'helpers', 'vscodeStubRegister.js');
+    const input = '<!--chain-->'.repeat(64) + '<NotSchema/>';
+    const script = [
+      `require(${JSON.stringify(vscodeStubPath)});`,
+      `const { isDataCompositionSchema } = require(${JSON.stringify(previewCorePath)});`,
+      `process.stdout.write(String(isDataCompositionSchema(${JSON.stringify(input)})));`,
+    ].join('\n');
+    const result = spawnSync(process.execPath, ['-e', script], {
+      encoding: 'utf8',
+      timeout: 2000,
+    });
+
+    assert.strictEqual(result.error, undefined, 'long comment preamble should be parsed promptly');
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.strictEqual(result.stdout, 'false');
+  });
+
+  test('the schema page sends a document version with edits instead of a text hash', () => {
+    const host = fs.readFileSync(path.join(coreRoot, 'host', 'dcs-editor.js'), 'utf8');
+    assert.ok(host.includes('var baseVersion = documentVersion'));
+    assert.ok(host.includes('baseVersion: baseVersion'));
+    assert.ok(host.includes('Number.isSafeInteger(msg.version)'));
+    assert.ok(!host.includes('function hash('));
+  });
+
+  test('every schema page asset is vendored', () => {
+    for (const rel of [
+      ...DCS_CORE_SCRIPTS,
+      ...DCS_CORE_STYLES,
+      'host/dcs-editor.js',
+      'host/dcs-diff.js',
+    ]) {
+      assert.ok(fs.existsSync(path.join(coreRoot, ...rel.split('/'))), `missing ${rel}`);
+    }
+  });
+
+  test('every platform picture the schema window asks for has its own icon', () => {
+    const preview = fs.readFileSync(path.join(coreRoot, 'dcs-preview.js'), 'utf8');
+    const pictures = fs.readFileSync(path.join(coreRoot, 'host', 'pictures.js'), 'utf8');
+    const asked = new Set(
+      Array.from(preview.matchAll(/std-pictures\/(\w+)\.(?:png|svg)/g), (m) => m[1])
+    );
+    assert.ok(asked.size > 10, 'expected the schema window to reference its pictures');
+    const icons = /var ICONS = \{([\s\S]*?)\n {2}\};/.exec(pictures);
+    assert.ok(icons, 'ICONS not found in host/pictures.js');
+    const drawn = new Set(Array.from(icons[1].matchAll(/^\s{4}(\w+):/gm), (m) => m[1]));
+    const missing = [...asked].filter((name) => !drawn.has(name));
+    assert.deepStrictEqual(missing, []);
+  });
+
+  test('the schema page reads a query with the bundled parser before the schema window loads', () => {
+    assert.ok(
+      DCS_CORE_SCRIPTS.indexOf('host/query-core.js') >= 0 &&
+        DCS_CORE_SCRIPTS.indexOf('host/query-core.js') < DCS_CORE_SCRIPTS.indexOf('dcs-preview.js')
+    );
+    const sandbox: { window?: unknown; BslQueryBuilderCore?: { parseSdbl(text: string): unknown } } = {};
+    sandbox.window = sandbox;
+    vm.createContext(sandbox);
+    vm.runInContext(
+      fs.readFileSync(path.join(coreRoot, 'host', 'query-core.js'), 'utf8') +
+        ';window.BslQueryBuilderCore = BslQueryBuilderCore;',
+      sandbox
+    );
+    const parsed = sandbox.BslQueryBuilderCore?.parseSdbl('ВЫБРАТЬ Т.Сумма КАК Сумма ИЗ РегистрНакопления.Продажи КАК Т') as {
+      queries: Array<{ fields: Array<{ alias?: string }> }>;
+    };
+    assert.strictEqual(parsed.queries[0].fields[0].alias, 'Сумма');
+  });
+
+  test('no platform picture files are bundled', () => {
+    assert.strictEqual(fs.existsSync(path.join(coreRoot, 'std-pictures')), false);
+  });
+});

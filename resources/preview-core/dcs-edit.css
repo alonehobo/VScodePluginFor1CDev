@@ -1,0 +1,77 @@
+/* The data composition schema window while it is edited: the status line, a
+ * property chosen from a list, the query designer button, the dialogs, pickers
+ * and command bars. Extracted from BslEdit web/dcs-edit.css (see UPSTREAM.md);
+ * the expression editor part is not included. */
+.dcs-status {
+    position:absolute; right:8px; bottom:6px; z-index:25; max-width:60%; padding:3px 8px;
+    background:#fff3f3; color:#b00000; border:1px solid #d23b3b; box-shadow:0 2px 6px rgba(0,0,0,.2);
+    opacity:0; pointer-events:none; transition:opacity .2s;
+}
+.dcs-status.dcs-status-on { opacity:1; }
+.dcs-cell-choice {
+    display:block; width:100%; min-width:120px; box-sizing:border-box; margin:0; padding:0 2px;
+    border:1px solid #7a9cd3; outline:none; background:#fff; color:#000; font:inherit;
+}
+.dcs-button.dcs-query-builder { width:auto; height:auto; padding:1px 10px; font-size:inherit; color:#000; cursor:pointer; }
+.dcs-settings-list { flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.dcs-settings-list > .dcs-grid { flex:1 1 auto; }
+.dcs-sets-left > .dcs-toolbar, .dcs-variants > .dcs-toolbar, .dcs-settings-right > .dcs-toolbar { margin-bottom:2px; }
+.dcs-crumb { color:#0645ad; cursor:pointer; }
+.dcs-crumb:hover { text-decoration:underline; }
+.dcs-crumb-sep, .dcs-hint { color:#666; font-weight:normal; }
+.dcs-link { color:#0645ad; cursor:pointer; text-decoration:underline; }
+.dcs-checklist { max-height:260px; overflow:auto; border:1px solid var(--dcs-border, #a0a0a0); background:#fff; margin:4px 0; min-width:240px; }
+.dcs-checklist-line { display:flex; align-items:center; gap:6px; padding:1px 6px; cursor:default; user-select:none; }
+.dcs-checklist-line:hover { background:#eef3fb; }
+.dcs-modal-overlay {
+    position:absolute; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
+    background:rgba(0,0,0,.18);
+}
+.dcs-modal {
+    display:flex; flex-direction:column; gap:6px; min-width:420px; max-width:min(900px, 96%); max-height:90%;
+    padding:0 10px 10px; background:#fbf9f2; color:#000; border:1px solid #8a8a8a; box-shadow:0 6px 24px rgba(0,0,0,.3); outline:none;
+}
+.dcs-modal-title {
+    display:flex; align-items:center; justify-content:space-between; margin:0 -10px; padding:4px 10px;
+    background:linear-gradient(#f4f4f4,#d8d8d8); border-bottom:1px solid #9a9a9a; font-weight:bold;
+}
+.dcs-modal-close { cursor:pointer; font-size:16px; line-height:1; padding:0 2px; color:#555; }
+.dcs-modal-close:hover { color:#000; }
+.dcs-modal-body { flex:1 1 auto; min-height:0; overflow:auto; display:flex; flex-direction:column; gap:6px; }
+.dcs-modal-wide { width:min(820px, 96%); }
+.dcs-rows { display:flex; flex-direction:column; gap:3px; min-height:0; }
+.dcs-rows-box { overflow:auto; max-height:320px; border:1px solid var(--dcs-border, #a0a0a0); background:#fff; }
+.dcs-rows-table { border-collapse:collapse; width:100%; table-layout:fixed; }
+.dcs-rows-table th { position:sticky; top:0; background:var(--dcs-head, #f2ebcc); color:var(--dcs-head-text, #4b3c0c); font-weight:normal; text-align:left; padding:2px 4px; border-bottom:1px solid #ccc6ad; }
+.dcs-rows-cell { padding:1px 2px; border-bottom:1px solid var(--dcs-grid-line, #bfd6f2); position:relative; }
+.dcs-rows-row.dcs-selected > td { background:#dbe7f7; }
+.dcs-rows-input { width:100%; box-sizing:border-box; padding:1px 3px; border:1px solid transparent; background:transparent; color:#000; font:inherit; }
+.dcs-rows-input:focus { outline:none; border-color:#7a9cd3; background:#fff; }
+.dcs-form-grid { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; align-items:center; }
+.dcs-form-grid .dcs-add-input { min-width:200px; }
+.dcs-ca { display:flex; flex-direction:column; gap:8px; }
+.dcs-ca-top { display:grid; grid-template-columns:1fr 1fr; gap:10px; align-items:start; }
+.dcs-modal-section { display:flex; flex-direction:column; gap:3px; min-width:0; }
+.dcs-modal-caption { font-weight:bold; color:var(--dcs-head-text, #4b3c0c); }
+.dcs-ca-areas { border:1px solid var(--dcs-border, #a0a0a0); background:#fff; padding:2px 0; }
+.dcs-rows-button { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; display:block; }
+.dcs-rows-readonly { color:#666; padding:1px 3px; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dcs-cell-text.dcs-editable:empty { display:inline-block; min-width:40px; min-height:1em; vertical-align:middle; }
+.dcs-modal-xwide { width:min(1180px, 96%); max-width:96%; }
+.dcs-add-form { padding:0 10px 10px; border-color:#8a8a8a; box-shadow:0 6px 24px rgba(0,0,0,.3); }
+.dcs-add-title { margin:0 -10px; padding:4px 10px; background:linear-gradient(#f4f4f4,#d8d8d8); border-bottom:1px solid #9a9a9a; }
+.dcs-pick-line { display:flex; gap:3px; min-width:0; }
+.dcs-pick-line .dcs-add-input { flex:1 1 auto; min-width:0; }
+.dcs-add-buttons .dcs-button, .dcs-pick-button { width:auto; height:auto; padding:1px 8px; font-size:inherit; cursor:pointer; color:#000; }
+.dcs-picker-modal { width:min(520px, 96%); height:min(560px, 90%); }
+.dcs-picker { display:flex; flex-direction:column; gap:4px; flex:1 1 auto; min-height:0; }
+.dcs-picker-tree { flex:1 1 auto; min-height:200px; overflow:auto; outline:none; border:1px solid var(--dcs-border, #a0a0a0); background:#fff; }
+.dcs-picker-tree table { width:100%; }
+.dcs-picker-tree .dcs-row { cursor:default; user-select:none; }
+.dcs-picker-twisty { cursor:pointer; }
+.dcs-picker-wait td { color:#777; font-style:italic; }
+.dcs-picker-path { color:#555; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:1.2em; }
+.dcs-colour-line { display:flex; align-items:center; gap:3px; min-width:0; }
+.dcs-colour-line .dcs-rows-input { flex:1 1 auto; min-width:0; }
+.dcs-colour-line .tp-colour-button { width:26px; padding:1px 3px; }
+.dcs-colour-line .tp-colour-pop { z-index:1000; }

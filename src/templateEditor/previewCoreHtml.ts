@@ -19,6 +19,92 @@ export const TEMPLATE_CORE_SCRIPTS = [
 
 export const TEMPLATE_CORE_STYLES = ['template.css', 'host/host.css'];
 
+/**
+ * Modules the data composition schema pages load. host/pictures.js comes
+ * first: it answers the platform picture paths the schema window asks for.
+ * The template comparison provides the splitter and the styles of the schema
+ * comparison; host/query-core.js is the query parser the schema window reads a
+ * data set's query with to fill its fields.
+ */
+export const DCS_CORE_SCRIPTS = [
+  'host/pictures.js',
+  'xml-util.js',
+  'diff-nav.js',
+  'template-preview.js',
+  'template-diff-view.js',
+  'host/query-core.js',
+  'dcs-preview.js',
+  'dcs-diff.js',
+  'dcs-diff-view.js',
+];
+
+export const DCS_CORE_STYLES = ['template.css', 'dcs.css', 'dcs-edit.css', 'host/host.css'];
+
+/** True when an Ext/Template.xml holds a data composition schema rather than a spreadsheet. */
+export function isDataCompositionSchema(xml: string): boolean {
+  // Walk the prolog once so untrusted comments cannot trigger regex backtracking.
+  let at = skipWhitespace(xml, 0);
+  if (xml.charAt(at) === '\uFEFF') {
+    at = skipWhitespace(xml, at + 1);
+  }
+
+  if (xml.startsWith('<?xml', at)) {
+    const declarationEnd = xml.indexOf('?>', at + 5);
+    if (declarationEnd < 0) {
+      return false;
+    }
+    at = skipWhitespace(xml, declarationEnd + 2);
+  }
+
+  while (xml.startsWith('<!--', at)) {
+    const commentEnd = xml.indexOf('-->', at + 4);
+    if (commentEnd < 0) {
+      return false;
+    }
+    at = skipWhitespace(xml, commentEnd + 3);
+  }
+
+  if (xml.charAt(at) !== '<') {
+    return false;
+  }
+
+  const nameStart = at + 1;
+  let prefixEnd = nameStart;
+  while (isWordCharacter(xml.charCodeAt(prefixEnd))) {
+    prefixEnd++;
+  }
+  const rootStart = prefixEnd > nameStart && xml.charAt(prefixEnd) === ':'
+    ? prefixEnd + 1
+    : nameStart;
+  const rootName = 'DataCompositionSchema';
+  if (!xml.startsWith(rootName, rootStart)) {
+    return false;
+  }
+
+  const delimiter = xml.charAt(rootStart + rootName.length);
+  return delimiter === '>' || isWhitespace(delimiter);
+}
+
+function skipWhitespace(xml: string, at: number): number {
+  while (at < xml.length && isWhitespace(xml.charAt(at))) {
+    at++;
+  }
+  return at;
+}
+
+function isWhitespace(value: string): boolean {
+  return /\s/.test(value);
+}
+
+function isWordCharacter(value: number): boolean {
+  return (
+    (value >= 0x30 && value <= 0x39) ||
+    (value >= 0x41 && value <= 0x5a) ||
+    (value >= 0x61 && value <= 0x7a) ||
+    value === 0x5f
+  );
+}
+
 export interface PreviewCorePage {
   title: string;
   /** Static markup of the page body; the host script fills it. */

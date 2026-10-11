@@ -72,6 +72,7 @@ export const coreSuiteFiles: string[] = [
   'suite/mxlPreviewProvider.test.js',
   'suite/mxlWebviewHtml.test.js',
   'suite/templateEditor.test.js',
+  'suite/dcsEditor.test.js',
   'suite/coreSuiteRegistration.test.js',
   'suite/extensionManifestContracts.test.js',
   'suite/extensionActivationLifecycle.test.js',

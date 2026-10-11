@@ -58,6 +58,7 @@ suite('editorCommands', () => {
       '1c-metadata-tree.startDebugging',
       '1c-metadata-tree.queryBuilder',
       '1c-metadata-tree.queryBuilderWithProcessing',
+      '1c-metadata-tree.queryBuilderForText',
     ]);
   });
 

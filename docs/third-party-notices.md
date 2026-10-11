@@ -60,7 +60,7 @@ SOFTWARE.
 
 ## BslEdit spreadsheet template editor
 
-`resources/preview-core/` bundles unmodified modules of BslEdit, `packages/1c-preview-core/browser/` ([repository](https://github.com/alonehobo/BslEdit)): the spreadsheet template parser and renderer, the markup editing engine, the template comparison and their styles. They run only inside the template editor and comparison webviews; `resources/preview-core/UPSTREAM.md` lists the files and `resources/preview-core/LICENSE` carries the MIT notice reproduced in the section above. No platform pictures or other platform artwork are bundled.
+`resources/preview-core/` bundles unmodified modules of BslEdit, `packages/1c-preview-core/browser/` ([repository](https://github.com/alonehobo/BslEdit)): the spreadsheet template parser and renderer, the markup editing engine, the template comparison, the data composition schema window and its comparison, and their styles. They run only inside the template editor and comparison webviews; `resources/preview-core/UPSTREAM.md` lists the files and `resources/preview-core/LICENSE` carries the MIT notice reproduced in the section above. No platform pictures or other platform artwork are bundled: the schema window's icons are drawn for this extension (`resources/preview-core/host/pictures.js`).
 
 ## Managed 1C form validation rules
 
