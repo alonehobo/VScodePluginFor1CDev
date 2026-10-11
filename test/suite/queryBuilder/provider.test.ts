@@ -1628,6 +1628,55 @@ suite('QueryBuilder Provider & Message Handler', () => {
       assert.strictEqual(initMsg.ast.queries[0].fields[0].alias, 'Товар');
     });
 
+    test('an unchanged query opened from an editor keeps its initial AST and skips rewriting the source', async () => {
+      const mockPanel = createMockPanel();
+      (vscode.window as any).createWebviewPanel = () => mockPanel.panel;
+
+      const sdblText = [
+        '// Комментарий запроса',
+        'ВЫБРАТЬ Товар.Ссылка КАК Ссылка',
+        'ИЗ Справочник.Номенклатура КАК Товар',
+      ].join('\n');
+      let editCount = 0;
+      const editor = createMockEditor(
+        sdblText,
+        () => { editCount++; },
+        { languageId: 'sdbl', fileName: 'test.sdbl' }
+      );
+      const provider = new QueryBuilderProvider(fakeContext, {} as any);
+      await provider.open(editor, 'simple');
+
+      mockPanel.simulateMessage({ command: 'ready' });
+      const initialAst = mockPanel.postedMessages[0]?.ast;
+      assert.ok(initialAst, 'the editor path should initialize the webview AST');
+      mockPanel.simulateMessage({ command: 'save', ast: initialAst, edited: false });
+
+      assert.strictEqual(editCount, 0, 'a no-op Save must not rewrite the source document');
+      assert.strictEqual(editor.getFullText(), sdblText);
+      assert.strictEqual(mockPanel.isDisposed(), true, 'a no-op Save should close the panel');
+    });
+
+    test('openText saves SDBL without requiring an editor', async () => {
+      const mockPanel = createMockPanel();
+      (vscode.window as any).createWebviewPanel = () => mockPanel.panel;
+      (vscode.window as any).activeTextEditor = undefined;
+
+      const sdblText = 'ВЫБРАТЬ Товар.Ссылка КАК Ссылка ИЗ Справочник.Номенклатура КАК Товар';
+      const provider = new QueryBuilderProvider(fakeContext, {} as any);
+      const savePromise = provider.openText(sdblText);
+
+      mockPanel.simulateMessage({ command: 'ready' });
+      const initialAst = mockPanel.postedMessages[0]?.ast;
+      assert.ok(initialAst, 'openText should initialize the webview AST');
+      mockPanel.simulateMessage({ command: 'save', ast: initialAst, edited: true });
+
+      const savedText = await savePromise;
+      assert.match(savedText ?? '', /ВЫБРАТЬ\s+Товар\.Ссылка/);
+      assert.ok(savedText?.includes('Справочник.Номенклатура'));
+      assert.strictEqual(mockPanel.isDisposed(), true);
+      assert.strictEqual(errorMessage, undefined);
+    });
+
     test('re-opening panel disposes previous message subscription and prevents duplicate message handling', async () => {
       const mockPanel = createMockPanel();
       (vscode.window as any).createWebviewPanel = () => mockPanel.panel;
